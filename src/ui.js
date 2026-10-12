@@ -548,13 +548,14 @@ export function setActiveProductionCategory(category){
   activeProductionCategory=category;
 }
 
-export function renderSettings(currentTheme="default"){
+export function renderSettings(currentTheme="default",customThemeData={}){
   const themes=[
     {id:"default",name:"原版"},
     {id:"strawberry",name:"草莓牛奶"},
     {id:"mint",name:"薄荷巧克"},
     {id:"monochrome",name:"黑白"},
-    {id:"pastel-blue",name:"粉蓝"}
+    {id:"pastel-blue",name:"粉蓝"},
+    {id:"custom",name:"自定义"}
   ];
   const themeChoices=themes.map(t=>{
     const isSelected=currentTheme===t.id;
@@ -564,16 +565,53 @@ export function renderSettings(currentTheme="default"){
     `</button>`;
   }).join("");
 
+  const customFields=[
+    {key:"bg",label:"背景",fallback:"#0b0f12"},
+    {key:"panel",label:"面板",fallback:"#12191d"},
+    {key:"panel2",label:"卡片",fallback:"#182126"},
+    {key:"text",label:"文字",fallback:"#e6edf0"},
+    {key:"muted",label:"次要",fallback:"#8ea0a8"},
+    {key:"line",label:"边框",fallback:"#2b3940"},
+    {key:"cyan",label:"强调",fallback:"#74d2d0"},
+    {key:"yellow",label:"提醒",fallback:"#e8bd68"},
+    {key:"red",label:"警告",fallback:"#ef726f"},
+    {key:"green",label:"健康",fallback:"#7ec68b"},
+    {key:"nextDayBg",label:"底部",fallback:"#e8bd68"},
+    {key:"nextDayText",label:"底字",fallback:"#0b1113"}
+  ];
+  const customEditor=currentTheme==="custom"
+    ? `<div class="custom-theme-editor">`+
+        `<div class="row-title">自定义颜色</div>`+
+        `<div class="custom-color-grid">`+
+          customFields.map(f=>{
+            const val=customThemeData[f.key]||f.fallback;
+            return `<div class="custom-color-item">`+
+              `<span class="custom-color-label">${f.label}</span>`+
+              `<input type="color" class="custom-color-picker" data-custom-key="${f.key}" value="${val}">`+
+            `</div>`;
+          }).join("")+
+        `</div>`+
+      `</div>`
+    : "";
+
   return `<section class="settings-panel">`+
     `<h2>设置</h2>`+
     `<div class="setting-item">`+
       `<div class="row-title">配色</div>`+
       `<div class="theme-choices" role="radiogroup" aria-label="页面配色">${themeChoices}</div>`+
+      customEditor+
     `</div>`+
     `<div class="setting-item">`+
       `<div class="row-title">存档</div>`+
+      `<p class="row-detail" style="margin:4px 0 8px;">导入教程：如果想把之前玩的存档放进来，先点击下方的迁移，在弹出的窗口里把旧网页导出的全部存档文本粘贴进大框里，再点击右下角绿色的导入按键即可完成。</p>`+
       `<div class="setting-reset-action">`+
         `<button class="icon-button compact-button" type="button" data-action="save-transfer">迁移</button>`+
+      `</div>`+
+    `</div>`+
+    `<div class="setting-item">`+
+      `<div class="row-title">图标</div>`+
+      `<div class="setting-reset-action">`+
+        `<button class="icon-button compact-button" type="button" data-action="upload-icon">上传</button>`+
       `</div>`+
     `</div>`+
     `<div class="setting-item">`+
@@ -973,11 +1011,16 @@ function renderFuelStorageRow(state){
 function renderAutomaticWaterStorageRow(state){
   const hasDrip=Object.entries(state.buildingsByArea[state.position]??{}).some(([id,progress])=>id.replace(/__\d+$/,'')==="drip_irrigation"&&progress.completed);
   const hasWaterFurniture=(state.furnitureByArea[state.position]??[]).some(entry=>Number(FURNITURE[entry.itemId]?.effect?.waterDaily??0)>0);
-  if(!hasDrip&&!hasWaterFurniture)return "";
+  const aqueducts=Object.entries(state.buildingsByArea[state.position]??{}).filter(([id,progress])=>id.replace(/__\d+$/,'')==="aqueduct"&&progress.completed).length;
+  const upgradedAqueducts=Object.entries(state.buildingsByArea[state.position]??{}).filter(([id,progress])=>id.replace(/__\d+$/,'')==="aqueduct_upgraded"&&progress.completed).length;
+  const seawaterProduction=aqueducts*3+upgradedAqueducts*5;
+  const hasAqueduct=aqueducts>0||upgradedAqueducts>0;
+  if(!hasDrip&&!hasWaterFurniture&&!hasAqueduct)return "";
   const {stored,expectedUse,shortage,consumers}=getAutomaticWaterStatus(state),{expectedProduction,producers}=getAutomaticWaterProductionStatus(state),priority="滴灌架 → 蒸发冷风器 → 浴缸/按摩浴缸";
   const summarize=(entries)=>entries.length?entries.map(entry=>`${entry.name}${entry.quantity}份`).join("、"):"无";
   const shortageText=shortage?` · <span class="insufficient">按当前库存缺水${shortage}份</span>`:" · 当前库存充足";
-  return `<div class="management-row automatic-water-row"><div class="management-row-head"><div class="row-main"><div class="row-title">自动用水 · 当地普通储物格有水${stored}份 / 今晚预计用水${expectedUse}份 / 产水${expectedProduction}份</div><div class="row-detail">已开启设施用水：${summarize(consumers)}；今晚设施产水：${summarize(producers)}。只使用当地普通储物格；结算顺序：${priority}${shortageText}。设施会在自动扣水前先产水。</div></div></div></div>`;
+  const seawaterText=hasAqueduct?` / 每日产海水${seawaterProduction}份`:"";
+  return `<div class="management-row automatic-water-row"><div class="management-row-head"><div class="row-main"><div class="row-title">自动用水 · 当地普通储物格有水${stored}份 / 今晚预计用水${expectedUse}份 / 产水${expectedProduction}份${seawaterText}</div><div class="row-detail">已开启设施用水：${summarize(consumers)}；今晚设施产水：${summarize(producers)}。只使用当地普通储物格；结算顺序：${priority}${shortageText}。设施会在自动扣水前先产水。</div></div></div></div>`;
 }
 
 function renderGridPowerConnections(state){

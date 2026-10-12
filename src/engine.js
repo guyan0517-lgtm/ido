@@ -3729,6 +3729,7 @@ export function getBuildOptions(state) {
     if ((definition.houseTier ?? 0) > houseLevel) continue;
     const replacedByCompletedUpgrade=Object.entries(BUILDINGS).some(([upgradeId,upgrade])=>upgrade.replaces===id&&Object.entries(state.buildingsByArea[areaId]??{}).some(([buildingId,progress])=>buildingId.replace(/__\d+$/u,"")===upgradeId&&progress.completed));
     if(replacedByCompletedUpgrade)continue;
+    if(id==="aqueduct_upgraded"&&!Object.entries(state.buildingsByArea[areaId]??{}).some(([bId,progress])=>bId.replace(/__\d+$/u,"")==="aqueduct"&&progress.completed))continue;
     const existing = Object.entries(state.buildingsByArea[areaId]).filter(([key]) => key === id || key.startsWith(`${id}__`));
     let max = definition.maxPerArea ?? 1;
     if (id === "planting_bed" && completedInstances(state, areaId, "farm_expansion").length > 0) {

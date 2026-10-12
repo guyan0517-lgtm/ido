@@ -22,6 +22,13 @@
     try {
       var savedTheme = localStorage.getItem("dropped_survival_theme");
       if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+      var savedIcon = localStorage.getItem("dropped_survival_custom_icon");
+      if (savedIcon) {
+        var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+        if (appleIcon) appleIcon.href = savedIcon;
+        var icons = document.querySelectorAll('link[rel="icon"]');
+        icons.forEach(function(el) { el.href = savedIcon; });
+      }
     } catch (e) {}
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {

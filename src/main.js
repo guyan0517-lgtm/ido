@@ -513,6 +513,7 @@ function runAction(target) {
     }
     return;
   }
+  if (action === "upload-icon") return uploadCustomIcon();
   if (action === "open-settings") return showSettings();
   if (action === "set-theme") {
     const chosen = target.closest("[data-theme]")?.dataset.theme ?? target.dataset.theme;
@@ -741,6 +742,10 @@ let longPressCraftTimer = null;
 let repeatCraftInterval = null;
 let activePressButton = null;
 
+let activeAction = null;
+let activeRecipeId = null;
+let activeItemId = null;
+
 function stopContinuousCraft() {
   if (longPressCraftTimer) {
     clearTimeout(longPressCraftTimer);
@@ -751,6 +756,9 @@ function stopContinuousCraft() {
     repeatCraftInterval = null;
   }
   activePressButton = null;
+  activeAction = null;
+  activeRecipeId = null;
+  activeItemId = null;
 }
 
 document.addEventListener("pointerdown", (event) => {
@@ -758,26 +766,33 @@ document.addEventListener("pointerdown", (event) => {
   if (!target || target.disabled) return;
   stopContinuousCraft();
   activePressButton = target;
+  activeAction = target.dataset.action;
+  activeRecipeId = target.dataset.recipe;
+  activeItemId = target.dataset.item;
   longPressCraftTimer = setTimeout(() => {
     longPressCraftTimer = null;
     repeatCraftInterval = setInterval(() => {
-      if (!activePressButton || activePressButton.disabled || !document.body.contains(activePressButton)) {
+      let currentBtn = null;
+      if (activeAction === "craft") {
+        currentBtn = document.querySelector(`[data-action="craft"][data-recipe="${activeRecipeId}"]`);
+      } else if (activeAction === "load-fuel") {
+        currentBtn = document.querySelector(`[data-action="load-fuel"][data-item="${activeItemId}"]`);
+      }
+      if (!currentBtn || currentBtn.disabled) {
         stopContinuousCraft();
         return;
       }
-      const action = activePressButton.dataset.action;
-      if (action === "craft") {
-        const recipeId = activePressButton.dataset.recipe;
-        const res = craftRecipe(state, recipeId);
+      activePressButton = currentBtn;
+      if (activeAction === "craft") {
+        const res = craftRecipe(state, activeRecipeId);
         if (!res || !res.ok) {
           stopContinuousCraft();
           return;
         }
         saveCurrentProgress();
         render();
-      } else if (action === "load-fuel") {
-        const itemId = activePressButton.dataset.item;
-        const res = loadFuel(state, itemId);
+      } else if (activeAction === "load-fuel") {
+        const res = loadFuel(state, activeItemId);
         if (!res || !res.ok) {
           stopContinuousCraft();
           return;
@@ -786,14 +801,21 @@ document.addEventListener("pointerdown", (event) => {
         render();
       }
     }, 120);
-  }, 400);
+  }, 350);
 });
 
-document.addEventListener("pointerup", stopContinuousCraft);
-document.addEventListener("pointercancel", stopContinuousCraft);
-document.addEventListener("pointerleave", (event) => {
-  if (activePressButton && event.target.contains(activePressButton)) {
+window.addEventListener("pointerup", stopContinuousCraft);
+window.addEventListener("pointercancel", stopContinuousCraft);
+window.addEventListener("pointermove", (event) => {
+  if (!activeAction) return;
+  const target = document.elementFromPoint(event.clientX, event.clientY);
+  if (!target || !target.closest(`[data-action="${activeAction}"]`)) {
     stopContinuousCraft();
+  }
+});
+window.addEventListener("contextmenu", (event) => {
+  if (event.target.closest("button, [data-action], .item-tile, .tab-button, .action-button, .compact-button, .theme-choice")) {
+    event.preventDefault();
   }
 });
 
@@ -1052,5 +1074,99 @@ function saveTransferImport() {
   showToast("导入成功");
   setTimeout(() => location.reload(), 600);
 }
+
+function applyCustomIcon(dataUrl) {
+  if (!dataUrl) return;
+  const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+  if (appleIcon) appleIcon.href = dataUrl;
+  const icons = document.querySelectorAll('link[rel="icon"]');
+  icons.forEach((el) => { el.href = dataUrl; });
+  try {
+    const dynamicManifest = {
+      name: "我一定要活下来",
+      short_name: "我一定要活下来",
+      description: "我一定要活下来",
+      start_url: "./index.html",
+      scope: "./",
+      display: "standalone",
+      orientation: "portrait-primary",
+      background_color: "#101417",
+      theme_color: "#101417",
+      icons: [
+        {
+          src: dataUrl,
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any maskable"
+        },
+        {
+          src: dataUrl,
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any maskable"
+        }
+      ]
+    };
+    const blob = new Blob([JSON.stringify(dynamicManifest)], { type: "application/manifest+json" });
+    const blobUrl = URL.createObjectURL(blob);
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) {
+      manifestLink.href = blobUrl;
+    }
+  } catch (e) {}
+}
+
+function uploadCustomIcon() {
+  let fileInput = document.getElementById("pwa-custom-icon-input");
+  if (!fileInput) {
+    fileInput = document.createElement("input");
+    fileInput.id = "pwa-custom-icon-input";
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.style.display = "none";
+    document.body.appendChild(fileInput);
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const img = new Image();
+          img.onload = async () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, 512, 512);
+            const dataUrl = canvas.toDataURL("image/png");
+            try {
+              localStorage.setItem("dropped_survival_custom_icon", dataUrl);
+            } catch (err) {}
+            applyCustomIcon(dataUrl);
+            try {
+              await fetch("/api/custom-icon", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: dataUrl })
+              });
+            } catch (err) {}
+            showToast("图标已更新");
+          };
+          img.src = e.target.result;
+        } catch (err) {
+          showToast("上传失败");
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  fileInput.value = "";
+  fileInput.click();
+}
+
+try {
+  const savedIcon = localStorage.getItem("dropped_survival_custom_icon");
+  if (savedIcon) applyCustomIcon(savedIcon);
+} catch (e) {}
 
 render();
