@@ -3231,8 +3231,9 @@ function resolvePastureAndHerb(state, summary) {
     const seawaterGained = aqueducts.length * 3 + upgradedAqueducts.length * 5;
     if (seawaterGained > 0) {
       addItem(state, "seawater", seawaterGained, { areaId });
-      summary.push(`${areaId}：水渠引流海水${seawaterGained}份存入当地储存库`);
-      addLog(state, `${areaId}：水渠引流海水${seawaterGained}份存入储存库。`);
+      const facilityName = upgradedAqueducts.length > 0 ? "高级水渠" : "水渠";
+      summary.push(`${areaId}：${facilityName}引流海水${seawaterGained}份存入当地储存库`);
+      addLog(state, `${areaId}：${facilityName}引流海水${seawaterGained}份存入储存库。`);
     }
     if (completedInstances(state, areaId, "herb_field").length > 0) {
       state.herbFieldsByArea ??= {};

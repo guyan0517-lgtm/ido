@@ -522,7 +522,7 @@ const STATION_CATEGORIES={
   tanning_rack:"craft",
   needle:"craft",
   compost:"craft",
-  smithy:"smelt",
+  smithy:"industry",
   smelter:"smelt",
   brick_kiln:"smelt",
   glass_furnace:"smelt",
@@ -534,10 +534,10 @@ const STATION_CATEGORIES={
 
 const PRODUCTION_CATEGORY_TABS=[
   {id:"all",label:"全部"},
-  {id:"food",label:"食物"},
   {id:"craft",label:"手工"},
   {id:"smelt",label:"冶炼"},
-  {id:"industry",label:"工业"}
+  {id:"industry",label:"工业"},
+  {id:"food",label:"食物"}
 ];
 
 let activeProductionCategory="all";
@@ -603,7 +603,7 @@ export function renderSettings(currentTheme="default",customThemeData={}){
     `</div>`+
     `<div class="setting-item">`+
       `<div class="row-title">存档</div>`+
-      `<p class="row-detail" style="margin:4px 0 8px;">导入教程：如果想把之前玩的存档放进来，先点击下方的迁移，在弹出的窗口里把旧网页导出的全部存档文本粘贴进大框里，再点击右下角绿色的导入按键即可完成。</p>`+
+      `<p class="row-detail" style="margin:4px 0 8px;line-height:1.6;">导入教程：第一步在旧网页设置里点导出并复制全部文字，第二步在当前页面点击下面的迁移，第三步把复制的文字粘贴进大框里，第四步点击右下角绿色的导入按键即可完成。</p>`+
       `<div class="setting-reset-action">`+
         `<button class="icon-button compact-button" type="button" data-action="save-transfer">迁移</button>`+
       `</div>`+
@@ -1019,8 +1019,9 @@ function renderAutomaticWaterStorageRow(state){
   const {stored,expectedUse,shortage,consumers}=getAutomaticWaterStatus(state),{expectedProduction,producers}=getAutomaticWaterProductionStatus(state),priority="滴灌架 → 蒸发冷风器 → 浴缸/按摩浴缸";
   const summarize=(entries)=>entries.length?entries.map(entry=>`${entry.name}${entry.quantity}份`).join("、"):"无";
   const shortageText=shortage?` · <span class="insufficient">按当前库存缺水${shortage}份</span>`:" · 当前库存充足";
-  const seawaterText=hasAqueduct?` / 每日产海水${seawaterProduction}份`:"";
-  return `<div class="management-row automatic-water-row"><div class="management-row-head"><div class="row-main"><div class="row-title">自动用水 · 当地普通储物格有水${stored}份 / 今晚预计用水${expectedUse}份 / 产水${expectedProduction}份${seawaterText}</div><div class="row-detail">已开启设施用水：${summarize(consumers)}；今晚设施产水：${summarize(producers)}。只使用当地普通储物格；结算顺序：${priority}${shortageText}。设施会在自动扣水前先产水。</div></div></div></div>`;
+  const aqueductType=upgradedAqueducts>0?"高级水渠":"水渠";
+  const seawaterText=hasAqueduct?` / 自动海水 · ${aqueductType}每日产${seawaterProduction}份`:"";
+  return `<div class="management-row automatic-water-row"><div class="management-row-head"><div class="row-main"><div class="row-title">自动用水 · 当地普通储物格有水${stored}份 / 今晚预计用水${expectedUse}份 / 产水${expectedProduction}份${seawaterText}</div><div class="row-detail">已开启设施用水：${summarize(consumers)}；今晚设施产水：${summarize(producers)}${hasAqueduct?`；海水引流：${aqueductType}每日产${seawaterProduction}份`:""}。只使用当地普通储物格；结算顺序：${priority}${shortageText}。设施会在自动扣水前先产水。</div></div></div></div>`;
 }
 
 function renderGridPowerConnections(state){
@@ -1116,6 +1117,7 @@ export function renderFacilities(state){
   const houseRow=houseLevel?`<div class="management-row"><div class="management-row-head"><div class="row-main"><div class="row-title">${house.name}</div><div class="row-detail">房屋 · 空间${house.space} · 保暖${house.warmth}℃ · 酸雨设施防护${house.acidRainFacilityProtection} · 强风设施防护${house.stormFacilityProtection}</div></div>${reinforcementActive?"":`<button class="action-button" data-action="reinforce">临时加固</button>`}</div></div>`:"";
 
   const isLandscape=(baseId,definition)=>{
+    if(["brick_kiln","smelter","smithy","glass_furnace"].includes(baseId))return true;
     if(MANAGED_FACILITIES.has(baseId))return false;
     if(definition.switchable)return false;
     if(definition.productionFuelCost||definition.capacity)return false;
@@ -1209,7 +1211,7 @@ function isInvSectionCollapsed(key) {
 function collapsibleInventoryCard(key, title, body, className = "", action = "") {
   const collapsed = isInvSectionCollapsed(key);
   const toggle = `<button type="button" class="collapsible-card-toggle" data-action="toggle-inventory-section" data-section="${key}"><span>${title}</span><span class="production-station-toggle-hint"><span class="production-station-toggle-label">${collapsed ? "展开" : "收起"}</span><span class="production-station-toggle-icon" aria-hidden="true">⌃</span></span></button>`;
-  return `<section class="card ${className} collapsible-inventory-card${collapsed ? " collapsed" : ""}" data-inventory-section="${key}"><div class="card-header collapsible-card-header"><h3>${toggle}</h3>${action}</div><div class="card-body"${collapsed ? " hidden" : ""}>${body}</div></section>`;
+  return `<section class="card ${className} collapsible-inventory-card${collapsed ? " collapsed" : ""}" data-inventory-section="${key}"><div class="card-header collapsible-card-header" data-action="toggle-inventory-section" data-section="${key}"><h3>${toggle}</h3>${action}</div><div class="card-body"${collapsed ? " hidden" : ""}>${body}</div></section>`;
 }
 
 export function renderEquipment(state) {
@@ -1222,7 +1224,7 @@ export function renderEquipment(state) {
   const equipped=Object.entries(slots).map(([slot,name])=>`<button type="button" class="equipment-slot-button" data-action="open-equipment-slot" data-slot="${slot}" aria-label="选择${name}装备"><span>${name}</span><strong>${ITEMS[state.player.equipment[slot]]?.name??"未装备"}</strong></button>`).join("");
   const survivalMetrics=getSurvivalMetrics(state).map(metric=>`<button type="button" class="survival-metric-button" data-action="open-survival-metric" data-metric="${metric.id}" aria-label="查看${metric.label}${["injury","disease"].includes(metric.id)?"状态":"来源"}"><span>${metric.label}</span><strong>${formatSurvivalMetricValue(metric)}</strong></button>`).join("");
   const isCollapsed = getEquipmentCollapsed();
-  const equipmentCard = `<section class="card wide equipment-card${isCollapsed ? " collapsed" : ""}" data-equipment-card="equipment"><div class="card-header production-station-header"><h3><button type="button" class="production-station-toggle" data-action="toggle-equipment-collapse" aria-expanded="${!isCollapsed}"><span>装备</span><span class="production-station-toggle-hint"><span class="production-station-toggle-label">${isCollapsed ? "展开" : "收起"}</span><span class="production-station-toggle-icon" aria-hidden="true">⌃</span></span></button></h3></div><div class="card-body equipment-card-body"${isCollapsed ? " hidden" : ""}><div class="equipment-slot-grid">${equipped}</div></div></section>`;
+  const equipmentCard = `<section class="card wide equipment-card${isCollapsed ? " collapsed" : ""}" data-equipment-card="equipment"><div class="card-header production-station-header equipment-card-header" data-action="toggle-equipment-collapse"><h3><button type="button" class="production-station-toggle" data-action="toggle-equipment-collapse" aria-expanded="${!isCollapsed}"><span>装备</span><span class="production-station-toggle-hint"><span class="production-station-toggle-label">${isCollapsed ? "展开" : "收起"}</span><span class="production-station-toggle-icon" aria-hidden="true">⌃</span></span></button></h3></div><div class="card-body equipment-card-body"${isCollapsed ? " hidden" : ""}><div class="equipment-slot-grid">${equipped}</div></div></section>`;
   return collapsibleInventoryCard("survival", "生存数值", `<div class="survival-metric-grid">${survivalMetrics}</div><div class="row-actions"><button class="action-button compact-button" data-action="open-wound-treatment">处理伤口</button><button class="action-button compact-button" data-action="use-medical" data-item="medicine">使用药剂</button></div>`) +
     equipmentCard +
     collapsibleInventoryCard("cold", `背包保鲜格 ${inv.cold.length}/${backpackCapacity.cold}`, itemGrid(inv.cold, "cold")) +

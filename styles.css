@@ -571,15 +571,30 @@ button,
   margin: 6px 0 10px;
 }
 
-.collapsible-card-header {
+.collapsible-card-header,
+.equipment-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
 }
-.collapsible-card-toggle {
+.collapsible-card-header h3,
+.equipment-card-header h3 {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
+  margin: 0;
+  cursor: pointer;
+}
+.collapsible-card-toggle,
+.equipment-card-header .production-station-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   gap: 6px;
   padding: 0;
   border: 0;
@@ -589,7 +604,8 @@ button,
   cursor: pointer;
   text-align: left;
 }
-.collapsible-card-toggle:hover {
+.collapsible-card-toggle:hover,
+.equipment-card-header .production-station-toggle:hover {
   color: var(--cyan);
 }
 .diet-filter-select {

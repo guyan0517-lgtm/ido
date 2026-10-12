@@ -1026,7 +1026,7 @@ function showSaveTransfer() {
       </div>
       <div class="setting-item" style="padding:8px 0;">
         <div class="row-title">导入</div>
-        <p class="row-detail" style="margin:4px 0 8px;">手动粘贴旧网页存档文本：</p>
+        <p class="row-detail" style="margin:4px 0 8px;line-height:1.6;">怎样导入：在旧版网页点设置里的导出并复制全部文本，粘贴到下方大框里，再点击右下角绿色的导入按键即可完成。</p>
         <textarea id="save-transfer-textarea" rows="4" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);color:var(--text);padding:8px;" placeholder="在此粘贴存档文本"></textarea>
       </div>
     </section>`,
