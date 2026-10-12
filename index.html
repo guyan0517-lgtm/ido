@@ -8,6 +8,27 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>被扔进一个求生游戏</title>
+  <meta name="description" content="被扔进一个求生游戏 (Dropped into Survival) - 一款策略文字生存模拟网页游戏。">
+  <meta property="og:title" content="被扔进一个求生游戏">
+  <meta property="og:description" content="被扔进一个求生游戏 (Dropped into Survival) - 一款策略文字生存模拟网页游戏。">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="我一定要活下来">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./assets/icon-512.png">
+  <script>
+    try {
+      var savedTheme = localStorage.getItem("dropped_survival_theme");
+      if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+    } catch (e) {}
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js').catch(function() {});
+      });
+    }
+  </script>
   <!-- 服务器若忽略防缓存配置，发布新版时替换下方所有 release-20261011-211121 即可强制更新。 -->
   <link rel="stylesheet" href="./styles.css?v=release-20261011-211121">
   <script type="importmap">
@@ -46,8 +67,13 @@
           </h1>
         </div>
         <div class="brand-actions">
-          <button id="new-game-button" class="icon-button restart-button" type="button" data-action="new-game">从头开始</button>
-          <button id="restart-day-button" class="icon-button" type="button" data-action="restart-day">重新开始本日</button>
+          <button id="restart-day-button" class="icon-button restart-day-button compact-button" type="button" data-action="restart-day">重新开始本日</button>
+          <button id="settings-button" class="icon-button settings-button" type="button" data-action="open-settings" aria-label="设置">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
         </div>
       </div>
       <div id="status-strip" class="status-strip"></div>

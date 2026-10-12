@@ -47,11 +47,16 @@ import {
   upgradePlotToGreenhouse,
   uprootCrop,
   useMedical,
-  waterPlot
+  waterPlot,
+  plantHerbField,
+  waterHerbField,
+  fertilizeHerbField,
+  harvestHerbField,
+  consolidateBackpack
 } from "./engine.js";
 import { captureInventoryScrollPositions, formatOutdoorRiskDescription, renderAnimalRunaways, renderBlueprintReference, renderCombat, renderCropDeaths, renderDietPicker, renderEncounterResult, renderEnding, renderEndDayConfirmation, renderEquipmentPicker, renderGreenhouseUpgradeConfirmation, renderHappinessDetails, renderItemDetails, renderItemReference, renderItemTransferActions, renderLottery, renderMap, renderMonkeyGift, renderMonkeyLosses, renderMoveConfirmation, renderReceivedMails, renderReinforcementConfirmation, renderSeedPicker, renderStaminaGuide, renderStatus, renderSurvivalMetricDetails, renderTemperatureGuide, renderTradeConfirmation, renderUprootConfirmation, renderView, renderWeatherDetails, renderWoundTreatmentPicker, restoreInventoryScrollPositions } from "./ui.js";
 
-import { renderGameInfo } from "./ui.js";
+import { renderGameInfo, renderSettings, setActiveProductionCategory } from "./ui.js";
 import { getLanguage, hasLanguagePreference, localizePage, setLanguage, t } from "./i18n.js";
 import { createPageModal } from "./page-modal.js";
 
@@ -64,6 +69,11 @@ const toast = document.querySelector("#toast");
 const nav = document.querySelector(".bottom-nav");
 const nextDayButton = document.querySelector("#next-day-button");
 let tab = "explore";
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
 let toastTimer;
 let pointerInventoryDrag=null;
 let nativeInventoryDrag=null;
@@ -75,7 +85,7 @@ let endingPresented=false;
 let pendingConfirmation=null;
 const collapsedProductionStations=new Set();
 const expandedUnavailableProductionStations=new Set();
-const collapsedFacilitySections=new Set();
+const collapsedFacilitySections=new Set(["landscape"]);
 const visibleResourceNodeCountsByArea=new Map();
 const RESOURCE_NODE_PAGE_SIZE=10;
 
@@ -168,6 +178,39 @@ function resolveConfirmation(confirmed){
   if(confirmed&&state===pending.state)pending.onConfirm();
 }
 
+const THEME_STORAGE_KEY = "dropped_survival_theme";
+
+function getSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) || "default";
+  } catch (e) {
+    return "default";
+  }
+}
+
+function applyTheme(themeId) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, themeId);
+  } catch (e) {}
+  document.documentElement.dataset.theme = themeId;
+  const themeMetaColors = {
+    "default": "#0b0f12",
+    "strawberry": "#fff5f8",
+    "mint": "#1c2321",
+    "monochrome": "#000000",
+    "pastel-blue": "#f8f9fa"
+  };
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor && themeMetaColors[themeId]) {
+    metaThemeColor.setAttribute("content", themeMetaColors[themeId]);
+  }
+}
+
+function showSettings() {
+  const currentTheme = getSavedTheme();
+  showModal(renderSettings(currentTheme), "settings");
+}
+
 function showGameInfo() {
   showModal(renderGameInfo(getLanguage()), "game-info", `<button type="button" class="action-button" data-action="open-language">切换语言</button>`);
 }
@@ -240,8 +283,13 @@ function scrollPageToTop(){
 function render(serializedProgress=null) {
   if(refreshOutdatedTradeOffers(state))serializedProgress=null;
   saveCurrentProgress(serializedProgress??serializeState(state));
-  const inventoryScrollPositions=captureInventoryScrollPositions(view);
-  statusStrip.innerHTML = renderStatus(state);
+  if (tab === "explore") {
+    statusStrip.style.display = "";
+    statusStrip.innerHTML = renderStatus(state);
+  } else {
+    statusStrip.style.display = "none";
+    statusStrip.innerHTML = "";
+  }
   const visibleNaturalNodeCount=visibleResourceNodeCountsByArea.get(state.position)??RESOURCE_NODE_PAGE_SIZE;
   view.innerHTML = renderView(tab, state,{visibleNaturalNodeCount});
   restoreProductionStationCollapseState();
@@ -382,6 +430,47 @@ function runAction(target) {
     render();
     return;
   }
+  if (action === "toggle-equipment-collapse") {
+    const isCollapsed = localStorage.getItem("dropped_survival_equipment_collapsed") === "1";
+    localStorage.setItem("dropped_survival_equipment_collapsed", isCollapsed ? "0" : "1");
+    render();
+    return;
+  }
+  if (action === "consolidate-backpack") {
+    const res = consolidateBackpack(state);
+    showToast(res.transferredCount > 0 ? "已整理同类物资" : "背包已是整齐状态");
+    render();
+    return;
+  }
+  if (action === "install-pwa") {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(() => {
+        deferredInstallPrompt = null;
+      });
+    } else {
+      showToast("在浏览器菜单选择添加到主屏幕即可");
+    }
+    return;
+  }
+  if (action === "open-settings") return showSettings();
+  if (action === "set-theme") {
+    const chosen = target.closest("[data-theme]")?.dataset.theme ?? target.dataset.theme;
+    if (chosen) {
+      applyTheme(chosen);
+      render();
+      showSettings();
+    }
+    return;
+  }
+  if (action === "select-production-category") {
+    const category = target.closest("[data-category]")?.dataset.category ?? target.dataset.category;
+    if (category) {
+      setActiveProductionCategory(category);
+      render();
+    }
+    return;
+  }
   if (action === "open-game-info" || action === "return-game-info") return showGameInfo();
   if (action === "open-language") return showLanguageChoice();
   if (action === "choose-language") return chooseLanguage(target.dataset.language);
@@ -441,6 +530,10 @@ function runAction(target) {
   if (action === "fertilize") return resolveResult(fertilizePlot(state,target.dataset.plot),()=>{});
   if (action === "toggle-plot-auto-fertilize") return resolveResult(togglePlotAutoFertilize(state,target.dataset.bed),()=>{});
   if (action === "harvest") return resolveResult(harvestPlot(state,target.dataset.plot),()=>{});
+  if (action === "plant-herb-field") return resolveResult(plantHerbField(state),render);
+  if (action === "water-herb-field") return resolveResult(waterHerbField(state),render);
+  if (action === "fertilize-herb-field") return resolveResult(fertilizeHerbField(state),render);
+  if (action === "harvest-herb-field") return resolveResult(harvestHerbField(state),render);
   if (action === "uproot") return showModal(renderUprootConfirmation(state,target.dataset.plot),"uproot-confirm");
   if (action === "cancel-uproot") {if(modal.open)modal.close();return;}
   if (action === "confirm-uproot") {const result=uprootCrop(state,target.dataset.plot);if(result.ok&&modal.open)modal.close();return resolveResult(result,()=>{});}
@@ -528,7 +621,7 @@ function runAction(target) {
     return resolveResult(result,()=>{});
   }
   if (action === "move") return showModal(renderMoveConfirmation(state,target.dataset.area),"move-confirm");
-  if (action === "cancel-move") {if(modal.open)modal.close();return;}
+  if (action === "cancel-move") return showModal(renderMap(state),"map");
   if (action === "confirm-move") {
     const result=moveTo(state,target.dataset.area,true);
     if((result.ok||result.died)&&modal.open)modal.close();
@@ -699,4 +792,5 @@ nextDayButton.addEventListener("click", () => {
   showModal(renderEndDayConfirmation(state),"end-day-confirm");
 });
 
+applyTheme(getSavedTheme());
 render();

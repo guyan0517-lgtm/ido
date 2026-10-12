@@ -404,14 +404,22 @@ const facilityRows = [
   ["mining_machine","采矿机",5,{gear:2,steel:1,copper_wire:1},1,1,{power:2},{blueprintTier:3,maxPerArea:5,allowedAreas:["D1","C2","E1"],requiresLocalStorage:true,powerPriority:100,damageImmune:true}],
   ["air_conditioner","空调",7,{steel:2,glass_panel:1,insulated_cable:1},2.5,5,{cooling:25,power:1,happiness:3},{blueprintLotteryOnly:true}],
   ["machine_shop","机械工坊",10,{steel:2,gear:1,insulated_cable:1},3,5,{capacity:3}],["weather_station","气象站",7,{steel:1,glass_panel:1,copper_wire:2,precision_part:1},2.5,5,{forecast:3,power:1},{blueprintFixedOnly:true}],
-  ["clinic","医务室",7,{brick:2,glass_panel:1,steel:1},2,5,{healing:true}]
+  ["clinic","医务室",7,{brick:2,glass_panel:1,steel:1},2,5,{healing:true}],
+  ["ice_cellar","冰窖",6,{concrete:2,steel:2,stone_brick:4,plank:4},2.5,5,{coldStorage:30},{noBlueprintRequired:true,prerequisites:["cellar_expansion"],replaces:"cellar_expansion"}],
+  ["farm_expansion","扩耕",4,{wood:6,rope:4,soil:6,fertilizer:2},2,5,{farmExpanded:true},{noBlueprintRequired:true}],
+  ["pasture","草场",5,{wood:6,plank:6,grass:10},2.5,5,{pasture:true},{noBlueprintRequired:true,prerequisites:["farm_expansion"]}],
+  ["herb_field","药田",4,{wood:4,stone:4,soil:4,fertilizer:2},2,5,{herbField:true},{noBlueprintRequired:true,maxPerArea:1}]
 ];
+addItem("fresh_herb","新鲜药草","material");
+addRecipe("medicine_fresh","特效药剂",{fresh_herb:1,honey:1,water:1},"medicine","cooking_table",2);
+addRecipe("dry_herb","草药",{fresh_herb:1},"herb","workbench",1);
 for (const row of facilityRows) facility(...row);
 // 同一地块只能建造一座的生产设施视为近乎不限次；允许同类多座/多件的生产工具保留各自原始产能与既有共用/累加方式。
 for(const definition of Object.values(FACILITIES))if(Number(definition.effect?.capacity??0)>0&&(definition.maxPerArea??1)===1)definition.effect.capacity=99;
 // 保留真正替代旧设施的升级链。
 Object.assign(FACILITIES.wood_stove,{prerequisites:["bonfire"],replaces:"bonfire"});
 Object.assign(FACILITIES.cellar_expansion,{prerequisites:["cellar"],replaces:"cellar"});
+Object.assign(FACILITIES.ice_cellar,{prerequisites:["cellar_expansion"],replaces:"cellar_expansion"});
 Object.assign(FACILITIES.drainage_system,{prerequisites:["drainage_ditch"],replaces:"drainage_ditch"});
 Object.assign(FACILITIES.insulation_layer,{prerequisites:["warm_lining"],replaces:"warm_lining",lotteryPrerequisites:["warm_lining"]});
 Object.assign(FACILITIES.pumping_station,{prerequisites:["well"],replaces:"well",lotteryPrerequisites:["well"]});

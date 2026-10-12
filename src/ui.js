@@ -253,8 +253,8 @@ function heading(title, detail) {
   return `<section class="page-heading wide"><div><h2>${title}</h2><p>${detail}</p></div></section>`;
 }
 
-function card(title, body, className = "") {
-  return `<section class="card ${className}"><div class="card-header"><h3>${title}</h3></div><div class="card-body">${body}</div></section>`;
+function card(title, body, className = "", action = "") {
+  return `<section class="card ${className}"><div class="card-header"><h3>${title}</h3>${action}</div><div class="card-body">${body}</div></section>`;
 }
 
 function dailyTasks(state) {
@@ -494,6 +494,85 @@ function recipeRow(state, recipeId, recipe) {
   return `<div class="recipe-row"><div class="row-main"><div class="row-title">${heldTitle}</div><div class="row-detail">产出：${outputs} · 材料：${inputs}${alternatives?` · 替代路线：${alternatives}`:""}</div></div><div class="row-actions"><button class="action-button" data-action="craft" data-recipe="${recipeId}" ${availability.ok ? "" : "disabled"}>${recipeActionLabel(recipe)}</button></div></div>`;
 }
 
+const STATION_CATEGORIES={
+  cooking_table:"food",
+  stone_pot:"food",
+  bonfire:"food",
+  wood_stove:"food",
+  oven:"food",
+  frying_pan:"food",
+  juicer:"food",
+  brewing_table:"food",
+  smokehouse:"food",
+  stone_mill:"food",
+  workbench:"craft",
+  masonry_table:"craft",
+  tanning_rack:"craft",
+  needle:"craft",
+  compost:"craft",
+  smithy:"smelt",
+  smelter:"smelt",
+  brick_kiln:"smelt",
+  glass_furnace:"smelt",
+  machine_shop:"industry",
+  chemical_table:"industry",
+  textile_table:"industry",
+  boatwright_bench:"industry"
+};
+
+const PRODUCTION_CATEGORY_TABS=[
+  {id:"all",label:"全部"},
+  {id:"food",label:"食物"},
+  {id:"craft",label:"手工"},
+  {id:"smelt",label:"冶炼"},
+  {id:"industry",label:"工业"}
+];
+
+let activeProductionCategory="all";
+export function getActiveProductionCategory(){
+  return activeProductionCategory;
+}
+export function setActiveProductionCategory(category){
+  activeProductionCategory=category;
+}
+
+export function renderSettings(currentTheme="default"){
+  const themes=[
+    {id:"default",name:"原版"},
+    {id:"strawberry",name:"草莓牛奶"},
+    {id:"mint",name:"薄荷巧克"},
+    {id:"monochrome",name:"黑白"},
+    {id:"pastel-blue",name:"粉蓝"}
+  ];
+  const themeChoices=themes.map(t=>{
+    const isSelected=currentTheme===t.id;
+    return `<button type="button" class="theme-choice${isSelected?" selected":""}" data-action="set-theme" data-theme="${t.id}" role="radio" aria-checked="${isSelected}">`+
+      `<span class="theme-choice-dot theme-dot-${t.id}"></span>`+
+      `<span class="theme-choice-name">${t.name}</span>`+
+    `</button>`;
+  }).join("");
+
+  return `<section class="settings-panel">`+
+    `<h2>设置</h2>`+
+    `<div class="setting-item">`+
+      `<div class="row-title">配色</div>`+
+      `<div class="theme-choices" role="radiogroup" aria-label="页面配色">${themeChoices}</div>`+
+    `</div>`+
+    `<div class="setting-item">`+
+      `<div class="row-title">保存</div>`+
+      `<div class="setting-reset-action">`+
+        `<button class="icon-button" type="button" data-action="install-pwa">保存到桌面</button>`+
+      `</div>`+
+    `</div>`+
+    `<div class="setting-item setting-reset-section">`+
+      `<div class="row-title">重置</div>`+
+      `<div class="setting-reset-action">`+
+        `<button id="new-game-button" class="icon-button restart-button" type="button" data-action="new-game">从头开始</button>`+
+      `</div>`+
+    `</div>`+
+  `</section>`;
+}
+
 export function renderProduction(state) {
   const groups=new Map();
   for(const [recipeId,recipe] of Object.entries(RECIPES)){
@@ -505,7 +584,19 @@ export function renderProduction(state) {
     groups.get(groupKey).recipes.push([recipeId,recipe]);
   }
   const orderedGroups=[...groups.values()].sort((left,right)=>Number(isKitchenStation(left.groupKey))-Number(isKitchenStation(right.groupKey)));
-  const sections=orderedGroups.map(({groupKey,status,recipes})=>{
+  const tabsHeader=`<div class="category-tabs" role="tablist">`+
+    PRODUCTION_CATEGORY_TABS.map(tab=>{
+      const active=activeProductionCategory===tab.id;
+      return `<button type="button" class="category-tab-button${active?" active":""}" data-action="select-production-category" data-category="${tab.id}" role="tab" aria-selected="${active}">${tab.label}</button>`;
+    }).join("")+
+    `</div>`;
+  const filteredGroups=activeProductionCategory==="all"
+    ? orderedGroups
+    : orderedGroups.filter(item=>{
+        const cat=STATION_CATEGORIES[item.groupKey]??(isKitchenStation(item.groupKey)?"food":"craft");
+        return cat===activeProductionCategory;
+      });
+  const sections=filteredGroups.map(({groupKey,status,recipes})=>{
     const usage=Number.isFinite(status.remaining)?`今日剩余 ${status.remaining}/${status.capacity} 次`:"不限次数";
     const unavailable=!status.available;
     const fuelInsufficient=status.productionFuelCost>0&&status.available&&status.remaining>0&&status.productionFuelCost>Number(state.fuelPointsByArea?.[state.position]??0);
@@ -516,7 +607,7 @@ export function renderProduction(state) {
     const recipeListId=`production-recipes-${groupKey.replace(/[^a-zA-Z0-9_-]/g,"-")}`;
     return `<section class="card wide production-station-card${unavailable?" collapsed":""}" data-production-station="${groupKey}" data-default-collapsed="${unavailable}"><div class="card-header production-station-header"><h3><button type="button" class="production-station-toggle" data-action="toggle-production-station" data-station="${groupKey}" aria-expanded="${!unavailable}" aria-controls="${recipeListId}"><span>${stationSummary}</span><span class="production-station-toggle-hint"><span class="production-station-toggle-label">${unavailable?"展开":"收起"}</span><span class="production-station-toggle-icon" aria-hidden="true">⌃</span></span></button></h3></div><div class="card-body production-recipe-list" id="${recipeListId}"${unavailable?" hidden":""}>${recipes.map(([id,recipe])=>recipeRow(state,id,recipe)).join("")}</div></section>`;
   }).join("");
-  return sections||card("当前没有可生产内容",`<div class="empty">当地没有可用的生产工具，或尚未获得它们对应的配方蓝图。</div>`,"wide");
+  return tabsHeader+(sections||card("当前没有可生产内容",`<div class="empty">当地没有可用的生产工具，或尚未获得它们对应的配方蓝图。</div>`,"wide"));
 }
 
 const PEN_TYPES={chicken_coop:"chicken",sheep_pen:"sheep",cattle_pen:"cattle",pig_pen:"pig"};
@@ -594,6 +685,9 @@ function describeFacility(id,definition,state){
   if(effect.utilityStorage)parts.push(`本地杂物储存格增加${effect.utilityStorage}格，只能存放家具和工具（含便携生产工具）`);
   if(effect.coldStorage)parts.push(`保鲜格增加${effect.coldStorage}`);
   if(effect.plots)parts.push(`提供${effect.plots}个种植位`);
+  if(effect.farmExpanded)parts.push("当地栽培地上限提升至三十块");
+  if(effect.pasture)parts.push("拥有五块自动照料草地，成熟后自动收割并转化为饲料入库");
+  if(effect.herbField)parts.push("拥有专属药田地块，用于种植草药并收获新鲜药草");
   if(effect.water)parts.push(`每日自动获得水${effect.water}份`);
   if(effect.cooling)parts.push(`当地降温${effect.cooling}℃`);
   if(effect.happiness)parts.push(`幸福度增加${effect.happiness}`);
@@ -726,6 +820,36 @@ function facilitySwitchButton(definition,id,progress,number=null){
   return `<button type="button" class="web-toggle-switch${enabled?" active":""}" role="switch" aria-checked="${enabled?"true":"false"}" aria-label="${enabled?"关闭":"开启"}${label}" data-action="toggle-facility" data-id="${id}"${progress.damaged?" disabled":""}><span aria-hidden="true"></span></button>`;
 }
 
+function renderPastureControls(state) {
+  state.pastureByArea ??= {};
+  const pasture = state.pastureByArea[state.position] ??= { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] };
+  while ((pasture.plots?.length ?? 0) < 5) (pasture.plots ??= []).push({ growth: 0 });
+  const rows = pasture.plots.map((plot, index) => {
+    const days = Number(plot.growth || 0);
+    const progressText = days >= 3 ? "已长满" : `生长中 ${days}/3天`;
+    return `<div class="facility-subrow"><div class="row-main"><strong>草料地 ${index + 1}</strong><div class="row-detail">${progressText}</div></div><div class="row-actions"><span class="tag">自动照料</span></div></div>`;
+  }).join("");
+  return `<div class="management-row-controls">${rows}</div>`;
+}
+
+function renderHerbFieldControls(state) {
+  state.herbFieldsByArea ??= {};
+  const field = state.herbFieldsByArea[state.position] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
+  const seedCount = countItem(state, "herb_seed");
+  const waterCost = getOutdoorActionPreview(state, 0).weatherExtra ? 2 : 1;
+  if (!field.planted) {
+    return `<div class="management-row-controls"><div class="row-actions"><button class="action-button" data-action="plant-herb-field" ${seedCount > 0 ? "" : "disabled"}>播种草药种子</button></div></div>`;
+  }
+  const condition = field.mature
+    ? "已成熟"
+    : `生长中，还需${field.remaining}天，丰饶${field.fertility}/5${field.watered ? "，已浇水" : ""}${field.fertilized ? "，已施肥" : ""}`;
+  const careCost = field.mature ? "" : `<div class="row-detail">水×${waterCost}，体力0.2；肥料×1，体力0.2</div>`;
+  const harvestButton = field.mature ? `<button class="action-button primary" data-action="harvest-herb-field">采收新鲜药草</button>` : "";
+  const waterButton = (!field.mature && !field.watered) ? `<button class="action-button" data-action="water-herb-field">浇水</button>` : "";
+  const fertilizeButton = (!field.mature && !field.fertilized && field.fertility < 5) ? `<button class="action-button" data-action="fertilize-herb-field">施肥</button>` : "";
+  return `<div class="management-row-controls"><div class="row-detail">${condition}</div>${careCost}<div class="row-actions">${harvestButton}${waterButton}${fertilizeButton}</div></div>`;
+}
+
 function renderBuiltFacilityRow(state,id,progress,includeFarmControls){
   const baseId=id.replace(/__\d+$/,""),definition=BUILDINGS[baseId];
   if(!definition)return "";
@@ -762,6 +886,8 @@ function renderBuiltFacilityRow(state,id,progress,includeFarmControls){
     controls=`<div class="management-row-controls"><div class="row-detail"><strong>全岛总电量${grid.generation}点</strong> · 已占用${grid.demand}点 · ${balance}</div><div class="row-detail">用电地块：${usage}${transient}</div>${renderGridPowerConnections(state)}</div>`;
   }
   else if(PEN_TYPES[baseId])controls=renderAnimalControls(state,PEN_TYPES[baseId]);
+  else if(baseId==="pasture")controls=renderPastureControls(state);
+  else if(baseId==="herb_field")controls=renderHerbFieldControls(state);
   else if(includeFarmControls)controls=renderFarmControls(state);
   return `<div class="management-row"><div class="management-row-head${definition.switchable?" management-row-head-toggle":""}"><div class="row-main"><div class="row-title">${displayName}</div><div class="row-detail">${describeFacility(baseId,definition,state)}${automaticFeedStatus}${usesFuel?` · 当前每日消耗${fuelCost}点`:""}${statusText?` · ${statusText}`:""}</div></div><div class="row-actions">${actions.join("")}</div></div>${controls}</div>`;
 }
@@ -905,15 +1031,40 @@ export function renderFacilities(state){
   completed.sort(([,a],[,b])=>(a.completedOrder??0)-(b.completedOrder??0));
   const protectionRow=`<div class="management-row"><div class="management-row-head"><div class="row-main"><div class="row-title">当地酸雨设施防护 ${acidRainFacilityProtection}/100</div><div class="row-detail">使酸雨造成的室外设施破损率降低${acidRainFacilityProtection}%；达到100时完全免疫</div><div class="row-title">当地强风设施防护 ${stormFacilityProtection}/100</div><div class="row-detail">使强风暴造成的室外设施破损率降低${stormFacilityProtection}%；达到100时完全免疫</div></div></div></div>`;
   const houseRow=houseLevel?`<div class="management-row"><div class="management-row-head"><div class="row-main"><div class="row-title">${house.name}</div><div class="row-detail">房屋 · 空间${house.space} · 保暖${house.warmth}℃ · 酸雨设施防护${house.acidRainFacilityProtection} · 强风设施防护${house.stormFacilityProtection}</div></div>${reinforcementActive?"":`<button class="action-button" data-action="reinforce">临时加固</button>`}</div></div>`:"";
+
+  const isLandscape=(baseId,definition)=>{
+    if(MANAGED_FACILITIES.has(baseId))return false;
+    if(definition.switchable)return false;
+    if(definition.productionFuelCost||definition.capacity)return false;
+    if(definition.autoWater||definition.autoFeed||definition.autoFertilize)return false;
+    if(definition.water||definition.power||definition.powerGeneration||definition.gridAccess)return false;
+    if(definition.coldStorage||definition.storage||definition.seedStorage||definition.utilityStorage||definition.wardrobeStorage)return false;
+    if(definition.forecast||definition.healing||definition.bees)return false;
+    return true;
+  };
+  const functionalCompleted=completed.filter(([id])=>{const baseId=id.replace(/__\d+$/,''),def=BUILDINGS[baseId];return !def||!isLandscape(baseId,def);});
+  const landscapeCompleted=completed.filter(([id])=>{const baseId=id.replace(/__\d+$/,''),def=BUILDINGS[baseId];return def&&isLandscape(baseId,def);});
+
   const renderedRepeatableFacilities=new Set();
-  const facilityRows=completed.filter(([id])=>!MANAGED_FACILITIES.has(id.replace(/__\d+$/,''))).map(([id,progress])=>{
+  const facilityRows=functionalCompleted.filter(([id])=>!MANAGED_FACILITIES.has(id.replace(/__\d+$/,''))).map(([id,progress])=>{
     const baseId=id.replace(/__\d+$/,''),definition=BUILDINGS[baseId];
     if(Number(definition.maxPerArea??1)<=1)return renderBuiltFacilityRow(state,id,progress,false);
     if(renderedRepeatableFacilities.has(baseId))return "";
     renderedRepeatableFacilities.add(baseId);
-    const instances=completed.filter(([buildingId])=>buildingId===baseId||buildingId.startsWith(`${baseId}__`));
+    const instances=functionalCompleted.filter(([buildingId])=>buildingId===baseId||buildingId.startsWith(`${baseId}__`));
     return renderRepeatableFacilityRow(state,baseId,instances);
   }).join("");
+
+  const renderedRepeatableLandscape=new Set();
+  const landscapeRows=landscapeCompleted.map(([id,progress])=>{
+    const baseId=id.replace(/__\d+$/,''),definition=BUILDINGS[baseId];
+    if(Number(definition.maxPerArea??1)<=1)return renderBuiltFacilityRow(state,id,progress,false);
+    if(renderedRepeatableLandscape.has(baseId))return "";
+    renderedRepeatableLandscape.add(baseId);
+    const instances=landscapeCompleted.filter(([buildingId])=>buildingId===baseId||buildingId.startsWith(`${baseId}__`));
+    return renderRepeatableFacilityRow(state,baseId,instances);
+  }).join("");
+
   const managedRows=MANAGED_FACILITY_ORDER.map(baseId=>{
     const instances=completed.filter(([id])=>id===baseId||id.startsWith(`${baseId}__`));
     return instances.length?renderManagedFacilityRow(state,baseId,instances):"";
@@ -930,7 +1081,9 @@ export function renderFacilities(state){
   });
   const buildRows=buildOptions.map(([id,definition])=>buildManagementRow(state,id,definition)).join("")+returnRows.buildable;
   const furniture=renderFurnitureRows(state,house);
+  const landscapeSection=landscapeRows?renderFacilitySection("landscape","景观",landscapeRows):"";
   return renderFacilitySection("existing","已有房子和设施",existingRows||`<div class="empty">当前地块还没有建成房子或设施</div>`)+
+    landscapeSection+
     renderFacilitySection("buildable","可建造的房子和设施",buildRows||`<div class="empty">当前没有可建造项目</div>`)+
     renderFacilitySection("furniture","家具",furniture.html,`<strong>已占用 ${furniture.used}/${house.space} 空间</strong>`);
 }
@@ -952,6 +1105,14 @@ export function restoreInventoryScrollPositions(root,positions){
   }
 }
 
+export function getEquipmentCollapsed() {
+  try {
+    return localStorage.getItem("dropped_survival_equipment_collapsed") === "1";
+  } catch (e) {
+    return false;
+  }
+}
+
 export function renderEquipment(state) {
   const inv = getInventoryView(state);
   const backpackCapacity=getBackpackCapacity(state);
@@ -961,9 +1122,12 @@ export function renderEquipment(state) {
   const slots={head:"头部",body:"上身",legs:"下身",feet:"足部",hands:"手部",weapon:"武器",backpack:"背包"};
   const equipped=Object.entries(slots).map(([slot,name])=>`<button type="button" class="equipment-slot-button" data-action="open-equipment-slot" data-slot="${slot}" aria-label="选择${name}装备"><span>${name}</span><strong>${ITEMS[state.player.equipment[slot]]?.name??"未装备"}</strong></button>`).join("");
   const survivalMetrics=getSurvivalMetrics(state).map(metric=>`<button type="button" class="survival-metric-button" data-action="open-survival-metric" data-metric="${metric.id}" aria-label="查看${metric.label}${["injury","disease"].includes(metric.id)?"状态":"来源"}"><span>${metric.label}</span><strong>${formatSurvivalMetricValue(metric)}</strong></button>`).join("");
-  return card("生存数值", `<div class="survival-metric-grid">${survivalMetrics}</div><div class="row-actions"><button class="action-button" data-action="open-wound-treatment">处理伤口</button><button class="action-button" data-action="use-medical" data-item="medicine">使用药剂</button></div><div class="equipment-slot-grid">${equipped}</div><p class="row-detail">拖动物品可调整顺序或换行存放；手机上长按后拖动。</p>`) +
+  const isCollapsed = getEquipmentCollapsed();
+  const equipmentCard = `<section class="card wide equipment-card${isCollapsed ? " collapsed" : ""}" data-equipment-card="equipment"><div class="card-header production-station-header"><h3><button type="button" class="production-station-toggle" data-action="toggle-equipment-collapse" aria-expanded="${!isCollapsed}"><span>装备</span><span class="production-station-toggle-hint"><span class="production-station-toggle-label">${isCollapsed ? "展开" : "收起"}</span><span class="production-station-toggle-icon" aria-hidden="true">⌃</span></span></button></h3></div><div class="card-body equipment-card-body"${isCollapsed ? " hidden" : ""}><div class="equipment-slot-grid">${equipped}</div></div></section>`;
+  return card("生存数值", `<div class="survival-metric-grid">${survivalMetrics}</div><div class="row-actions"><button class="action-button compact-button" data-action="open-wound-treatment">处理伤口</button><button class="action-button compact-button" data-action="use-medical" data-item="medicine">使用药剂</button></div>`) +
+    equipmentCard +
     card(`背包保鲜格 ${inv.cold.length}/${backpackCapacity.cold}`, itemGrid(inv.cold, "cold")) +
-    card(`背包普通格 ${inv.ordinary.length}/${backpackCapacity.ordinary}`, itemGrid(inv.ordinary, "ordinary")) +
+    card(`背包普通格 ${inv.ordinary.length}/${backpackCapacity.ordinary}`, `<p class="row-detail">拖动物品可调整顺序或换行存放；手机上长按后拖动。</p>${itemGrid(inv.ordinary, "ordinary")}`, "", `<button type="button" class="compact-button secondary-button" data-action="consolidate-backpack">整理</button>`) +
     (wardrobeCapacity||inv.wardrobe.length?card(`衣帽间 ${inv.wardrobe.length}/${wardrobeCapacity}`,itemGrid(inv.wardrobe,"wardrobe")):"") +
     (seedStorageCapacity||inv.seedStorage.length?card(`本地种子储存室 ${inv.seedStorage.length}/${seedStorageCapacity}`,`<p class="row-detail">只能存放种子</p>${itemGrid(inv.seedStorage,"seed-storage")}`):"") +
     (utilityStorageCapacity||inv.utilityStorage.length?card(`本地杂物间 ${inv.utilityStorage.length}/${utilityStorageCapacity}`,`<p class="row-detail">只能存放家具和工具（含便携生产工具）</p>${itemGrid(inv.utilityStorage,"utility-storage")}`):"") +

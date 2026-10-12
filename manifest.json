@@ -1,0 +1,25 @@
+{
+  "name": "我一定要活下来",
+  "short_name": "我一定要活下来",
+  "description": "我一定要活下来 - 策略文字生存模拟网页游戏",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#101417",
+  "theme_color": "#101417",
+  "icons": [
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
