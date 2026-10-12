@@ -408,11 +408,21 @@ const facilityRows = [
   ["ice_cellar","冰窖",6,{concrete:2,steel:2,stone_brick:4,plank:4},2.5,5,{coldStorage:30},{noBlueprintRequired:true,prerequisites:["cellar_expansion"],replaces:"cellar_expansion"}],
   ["farm_expansion","扩耕",4,{wood:6,rope:4,soil:6,fertilizer:2},2,5,{farmExpanded:true},{noBlueprintRequired:true}],
   ["pasture","草场",5,{wood:6,plank:6,grass:10},2.5,5,{pasture:true},{noBlueprintRequired:true,prerequisites:["farm_expansion"]}],
-  ["herb_field","药田",4,{wood:4,stone:4,soil:4,fertilizer:2},2,5,{herbField:true},{noBlueprintRequired:true,maxPerArea:1}]
+  ["herb_field","药田",4,{wood:4,stone:4,soil:4,fertilizer:2},2,5,{herbField:true},{noBlueprintRequired:true,maxPerArea:1}],
+  ["fishery","渔场",4,{wood:4,stone:4,plank:2},1.5,2,{animal:"fish",capacity:4},{maxPerArea:2,completionBlueprints:["fish_feed"]}],
+  ["aqueduct","水渠",6,{stone_brick:3,wood:3},2,3,{seawaterDaily:3},{maxPerArea:1,noBlueprintRequired:true}],
+  ["aqueduct_upgraded","高级水渠",7,{steel:1,brick:2,clay:2},2,4,{seawaterDaily:5},{maxPerArea:1,noBlueprintRequired:true,prerequisites:["aqueduct"],replaces:"aqueduct"}]
 ];
 addItem("fresh_herb","新鲜药草","material");
+addItem("corn","玉米","material");
+addItem("fish_feed","鱼饲料","material");
+addItem("fry","鱼苗","material");
+addItem("crab_larva","蟹苗","material");
+addItem("fish_meat","鱼肉","food",{hunger:12,happiness:2});
+addItem("crab_meat","蟹肉","food",{hunger:15,happiness:3});
 addRecipe("medicine_fresh","特效药剂",{fresh_herb:1,honey:1,water:1},"medicine","cooking_table",2);
 addRecipe("dry_herb","草药",{fresh_herb:1},"herb","workbench",1);
+addRecipe("craft_fish_feed","鱼饲料",{corn:1},"fish_feed","workbench",1);
 for (const row of facilityRows) facility(...row);
 // 同一地块只能建造一座的生产设施视为近乎不限次；允许同类多座/多件的生产工具保留各自原始产能与既有共用/累加方式。
 for(const definition of Object.values(FACILITIES))if(Number(definition.effect?.capacity??0)>0&&(definition.maxPerArea??1)===1)definition.effect.capacity=99;
@@ -420,6 +430,7 @@ for(const definition of Object.values(FACILITIES))if(Number(definition.effect?.c
 Object.assign(FACILITIES.wood_stove,{prerequisites:["bonfire"],replaces:"bonfire"});
 Object.assign(FACILITIES.cellar_expansion,{prerequisites:["cellar"],replaces:"cellar"});
 Object.assign(FACILITIES.ice_cellar,{prerequisites:["cellar_expansion"],replaces:"cellar_expansion"});
+Object.assign(FACILITIES.aqueduct_upgraded,{prerequisites:["aqueduct"],replaces:"aqueduct"});
 Object.assign(FACILITIES.drainage_system,{prerequisites:["drainage_ditch"],replaces:"drainage_ditch"});
 Object.assign(FACILITIES.insulation_layer,{prerequisites:["warm_lining"],replaces:"warm_lining",lotteryPrerequisites:["warm_lining"]});
 Object.assign(FACILITIES.pumping_station,{prerequisites:["well"],replaces:"well",lotteryPrerequisites:["well"]});
@@ -474,7 +485,9 @@ export const LIVESTOCK = {
   chicken:{name:"鸡",youngItem:"chick",feed:{feed:1},matureDays:8,stages:[{name:"幼鸡",days:3},{name:"抱窝鸡",days:5},{name:"鸡群"}],continuous:{egg:{quantity:1,every:1},feather:{quantity:1,every:1},manure:{quantity:1,every:1},chicken_meat:{quantity:1,every:3}}},
   sheep:{name:"羊",youngItem:"lamb",feed:{feed:1},matureDays:9,stages:[{name:"小羊",days:4},{name:"产仔羊",days:5},{name:"羊群"}],continuous:{wool:{quantity:1,every:1},mutton:{quantity:1,every:3},large_bone:{quantity:1,every:3},tendon:{quantity:1,every:3},animal_fat:{quantity:1,every:3},manure:{quantity:1,every:1}}},
   cattle:{name:"牛",youngItem:"calf",feed:{feed:1},matureDays:16,stages:[{name:"小牛",days:6},{name:"育仔牛",days:10},{name:"牛群"}],continuous:{milk:{quantity:1,every:1},beef:{quantity:1,every:4},cattle_pelt:{quantity:2,every:4},large_bone:{quantity:1,every:4},tendon:{quantity:1,every:4},animal_fat:{quantity:1,every:4},manure:{quantity:1,every:1}}},
-  pig:{name:"猪",youngItem:"piglet",feed:{feed:1},matureDays:9,stages:[{name:"幼猪",days:4},{name:"育仔猪",days:5},{name:"猪群"}],continuous:{pork:{quantity:1,every:3},pig_pelt:{quantity:1,every:3},animal_fat:{quantity:1,every:3},manure:{quantity:1,every:1}}}
+  pig:{name:"猪",youngItem:"piglet",feed:{feed:1},matureDays:9,stages:[{name:"幼猪",days:4},{name:"育仔猪",days:5},{name:"猪群"}],continuous:{pork:{quantity:1,every:3},pig_pelt:{quantity:1,every:3},animal_fat:{quantity:1,every:3},manure:{quantity:1,every:1}}},
+  fish:{name:"鱼",youngItem:"fry",feed:{fish_feed:1},matureDays:6,stages:[{name:"鱼苗",days:2},{name:"成鱼",days:4},{name:"鱼群"}],continuous:{fish_meat:{quantity:2,every:2}}},
+  crab:{name:"螃蟹",youngItem:"crab_larva",feed:{fish_feed:1},matureDays:6,stages:[{name:"蟹苗",days:2},{name:"成蟹",days:4},{name:"蟹群"}],continuous:{crab_meat:{quantity:2,every:2},crab_shell:{quantity:1,every:2}}}
 };
 
 export const ENEMIES = {

@@ -52,7 +52,11 @@ import {
   waterHerbField,
   fertilizeHerbField,
   harvestHerbField,
-  consolidateBackpack
+  consolidateBackpack,
+  applyYesterdayDiet,
+  storeAllSeeds,
+  upgradePastureToGreenhouse,
+  upgradeHerbFieldToGreenhouse
 } from "./engine.js";
 import { captureInventoryScrollPositions, formatOutdoorRiskDescription, renderAnimalRunaways, renderBlueprintReference, renderCombat, renderCropDeaths, renderDietPicker, renderEncounterResult, renderEnding, renderEndDayConfirmation, renderEquipmentPicker, renderGreenhouseUpgradeConfirmation, renderHappinessDetails, renderItemDetails, renderItemReference, renderItemTransferActions, renderLottery, renderMap, renderMonkeyGift, renderMonkeyLosses, renderMoveConfirmation, renderReceivedMails, renderReinforcementConfirmation, renderSeedPicker, renderStaminaGuide, renderStatus, renderSurvivalMetricDetails, renderTemperatureGuide, renderTradeConfirmation, renderUprootConfirmation, renderView, renderWeatherDetails, renderWoundTreatmentPicker, restoreInventoryScrollPositions } from "./ui.js";
 
@@ -465,6 +469,33 @@ function runAction(target) {
     render();
     return;
   }
+  if (action === "toggle-inventory-section") {
+    const sec = target.dataset.section;
+    const isCol = localStorage.getItem(`inv_section_collapsed_${sec}`) === "1";
+    localStorage.setItem(`inv_section_collapsed_${sec}`, isCol ? "0" : "1");
+    render();
+    return;
+  }
+  if (action === "switch-farm-section") {
+    state.farmSection = Number(target.dataset.section);
+    render();
+    return;
+  }
+  if (action === "store-all-seeds") {
+    const res = storeAllSeeds(state);
+    showToast(res.message);
+    saveCurrentProgress();
+    render();
+    return;
+  }
+  if (action === "apply-yesterday-diet") {
+    applyYesterdayDiet(state);
+    saveCurrentProgress();
+    render();
+    return;
+  }
+  if (action === "upgrade-pasture-greenhouse") return resolveResult(upgradePastureToGreenhouse(state), render);
+  if (action === "upgrade-herb-greenhouse") return resolveResult(upgradeHerbFieldToGreenhouse(state), render);
   if (action === "consolidate-backpack") {
     const res = consolidateBackpack(state);
     showToast(res.transferredCount > 0 ? "已整理同类物资" : "背包已是整齐状态");
@@ -694,6 +725,76 @@ function runAction(target) {
 document.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
   if (target) runAction(target);
+});
+
+document.addEventListener("change", (event) => {
+  const target = event.target.closest('[data-action="filter-diet-happiness"]');
+  if (target) {
+    const val = Number(target.value);
+    state.dietMinHappiness = state.dietMinHappiness ?? {};
+    state.dietMinHappiness[target.dataset.kind] = val;
+    showModal(renderDietPicker(state, target.dataset.kind, val), "diet");
+  }
+});
+
+let longPressCraftTimer = null;
+let repeatCraftInterval = null;
+let activePressButton = null;
+
+function stopContinuousCraft() {
+  if (longPressCraftTimer) {
+    clearTimeout(longPressCraftTimer);
+    longPressCraftTimer = null;
+  }
+  if (repeatCraftInterval) {
+    clearInterval(repeatCraftInterval);
+    repeatCraftInterval = null;
+  }
+  activePressButton = null;
+}
+
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target.closest('[data-action="craft"], [data-action="load-fuel"]');
+  if (!target || target.disabled) return;
+  stopContinuousCraft();
+  activePressButton = target;
+  longPressCraftTimer = setTimeout(() => {
+    longPressCraftTimer = null;
+    repeatCraftInterval = setInterval(() => {
+      if (!activePressButton || activePressButton.disabled || !document.body.contains(activePressButton)) {
+        stopContinuousCraft();
+        return;
+      }
+      const action = activePressButton.dataset.action;
+      if (action === "craft") {
+        const recipeId = activePressButton.dataset.recipe;
+        const res = craftRecipe(state, recipeId);
+        if (!res || !res.ok) {
+          stopContinuousCraft();
+          return;
+        }
+        saveCurrentProgress();
+        render();
+      } else if (action === "load-fuel") {
+        const itemId = activePressButton.dataset.item;
+        const res = loadFuel(state, itemId);
+        if (!res || !res.ok) {
+          stopContinuousCraft();
+          return;
+        }
+        saveCurrentProgress();
+        render();
+      }
+    }, 120);
+  }, 400);
+});
+
+document.addEventListener("pointerup", stopContinuousCraft);
+document.addEventListener("pointercancel", stopContinuousCraft);
+document.addEventListener("pointerleave", (event) => {
+  if (activePressButton && event.target.contains(activePressButton)) {
+    stopContinuousCraft();
+  }
 });
 
 function moveInventoryStack(source,index,target,insertionIndex){

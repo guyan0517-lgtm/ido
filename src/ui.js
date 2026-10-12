@@ -283,7 +283,7 @@ function dietCard(state) {
     const detail = item ? `幸福度 ${happiness >= 0 ? "+" : ""}${happiness}${buffText(item)}` : "幸福度 −10";
     return `<button class="choice-button diet-plan ${item ? "selected" : ""}" data-action="open-diet" data-kind="${kind}"><strong>${item ? item.name : "未设定"}</strong><span>${detail}</span></button>`;
   };
-  return card("今日饮食", `<div class="choice-grid"><div><p class="row-detail">食物</p>${planButton("food", state.selectedFood)}</div><div><p class="row-detail">饮料</p>${planButton("drink", state.selectedDrink)}</div></div>`);
+  return card("今日饮食", `<div class="choice-grid"><div><p class="row-detail">食物</p>${planButton("food", state.selectedFood)}</div><div><p class="row-detail">饮料</p>${planButton("drink", state.selectedDrink)}</div></div>`, "", `<button type="button" class="action-button header-action" data-action="apply-yesterday-diet">昨日</button>`);
 }
 
 function getDietOptions(state, kind) {
@@ -308,7 +308,7 @@ function localMapPreview(state, areaId) {
   </div>`;
 }
 
-export function renderDietPicker(state, kind) {
+export function renderDietPicker(state, kind, minHappiness = state.dietMinHappiness?.[kind] ?? 0) {
   const isFood = kind === "food";
   const plan = isFood ? state.selectedFood : state.selectedDrink;
   const kindName = isFood ? "食物" : "饮料";
@@ -321,14 +321,16 @@ export function renderDietPicker(state, kind) {
     }
     return grouped;
   }, new Map()).values()];
-  const rows = options.map(({ itemId, item, sourceKey, selected, quantity }) => {
+  const filteredOptions = minHappiness > 0 ? options.filter(opt => (opt.item.happiness ?? 0) >= minHappiness) : options;
+  const rows = filteredOptions.map(({ itemId, item, sourceKey, selected, quantity }) => {
     const happiness = item.happiness ?? 0;
     const effect=item.nextDayEffect??{},labels={attack:"攻击",warmth:"保暖",heat:"防热",rain:"防雨",storm:"防风"};
     const effects=Object.entries(labels).filter(([key])=>Number(effect[key]??0)>0).map(([key,label])=>`${label}+${effect[key]}`);
     return `<button type="button" class="diet-option-button${selected ? " selected" : ""}" data-action="choose-diet" data-item="${itemId}" data-source="${sourceKey}" aria-pressed="${selected ? "true" : "false"}"><strong>${item.name} ×${quantity}</strong><span>幸福度 ${happiness >= 0 ? "+" : ""}${happiness}${effects.length?` · 明日${effects.join("、")}`:""}</span></button>`;
   }).join("");
   const noChoice = `<button type="button" class="diet-option-button${plan ? "" : " selected"}" data-action="clear-diet" data-kind="${kind}" aria-pressed="${plan ? "false" : "true"}"><strong>不选择${kindName}</strong><span>幸福度 −10</span></button>`;
-  return `<h2>选择今日${kindName}</h2><div class="diet-option-list">${noChoice}${rows}</div>`;
+  const selectFilter = `<select class="diet-filter-select" data-action="filter-diet-happiness" data-kind="${kind}"><option value="0"${minHappiness===0?" selected":""}>全部</option><option value="1"${minHappiness===1?" selected":""}>1以上</option><option value="2"${minHappiness===2?" selected":""}>2以上</option><option value="3"${minHappiness===3?" selected":""}>3以上</option><option value="4"${minHappiness===4?" selected":""}>4以上</option><option value="5"${minHappiness===5?" selected":""}>5以上</option></select>`;
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><h2>选择今日${kindName}</h2>${selectFilter}</div><div class="diet-option-list">${noChoice}${rows}</div>`;
 }
 
 export function renderWoundTreatmentPicker(state) {
@@ -409,7 +411,17 @@ function areaCard(state,{visibleNaturalNodeCount=10}={}) {
     ? `<button type="button" class="secondary-button resource-show-more-button" data-action="show-more-resource-nodes" aria-label="再显示10个资源点">Show more</button>`
     : "";
   const cultivatedMethod=getCultivatedHarvestMethod(state);
-  const cultivatedNodes=(state.plotsByArea[state.position]??[]).map(plot=>{
+  const totalPlots=state.plotsByArea[state.position]??[];
+  const farmSlotsCount=getFarmPlotSlots(state).length;
+  let farmSectionTabs="";
+  let visiblePlots=totalPlots;
+  if(farmSlotsCount>10){
+    const currentSection=Math.max(0,Math.min(2,Number(state.farmSection??0)));
+    const sectionNames=["前圃","中圃","后圃"];
+    farmSectionTabs=`<div class="farm-section-tabs">${sectionNames.map((name,idx)=>`<button type="button" class="compact-button secondary-button${idx===currentSection?" active primary":""}" data-action="switch-farm-section" data-section="${idx}">${name}</button>`).join("")}</div>`;
+    visiblePlots=totalPlots.slice(currentSection*10,currentSection*10+10);
+  }
+  const cultivatedNodes=farmSectionTabs+visiblePlots.map(plot=>{
     const crop=CROPS[plot.cropId],ready=plot.phase==="ready"&&plot.charges>0;
     const detail=ready?`${plot.charges}/${plot.maxCharges} 消耗体力0.5`:plot.phase==="regrowing"?`0/${plot.maxCharges||crop.stock} 恢复中，还需${plot.remaining}个浇水日`:`生长中，还需${plot.remaining}个浇水日`;
     const attributes=ready?`data-action="harvest" data-plot="${plot.id}"`:"disabled";
@@ -616,18 +628,25 @@ export function renderProduction(state) {
   return tabsHeader+(sections||card("当前没有可生产内容",`<div class="empty">当地没有可用的生产工具，或尚未获得它们对应的配方蓝图。</div>`,"wide"));
 }
 
-const PEN_TYPES={chicken_coop:"chicken",sheep_pen:"sheep",cattle_pen:"cattle",pig_pen:"pig"};
-const ANIMAL_LABELS={chicken:{adult:"鸡",young:"小鸡"},sheep:{adult:"羊",young:"羊羔"},cattle:{adult:"牛",young:"牛犊"},pig:{adult:"猪",young:"猪仔"}};
-const MANAGED_FACILITY_ORDER=["planting_bed","chicken_coop","sheep_pen","cattle_pen","pig_pen"];
+const PEN_TYPES={chicken_coop:"chicken",sheep_pen:"sheep",cattle_pen:"cattle",pig_pen:"pig",fishery:"fish"};
+const ANIMAL_LABELS={chicken:{adult:"鸡",young:"小鸡"},sheep:{adult:"羊",young:"羊羔"},cattle:{adult:"牛",young:"牛犊"},pig:{adult:"猪",young:"猪仔"},fish:{adult:"鱼",young:"鱼苗"},crab:{adult:"螃蟹",young:"蟹苗"}};
+const MANAGED_FACILITY_ORDER=["planting_bed","chicken_coop","sheep_pen","cattle_pen","pig_pen","fishery"];
 const MANAGED_FACILITIES=new Set(MANAGED_FACILITY_ORDER);
 const PRODUCTION_FURNITURE_IDS=Object.keys(DEVICES);
 const LIVESTOCK_PRODUCT_DISPLAY_ORDER={
   chicken:["chicken_meat","egg","feather","manure"],
   sheep:["mutton","wool","large_bone","tendon","animal_fat","manure"],
   cattle:["beef","milk","cattle_pelt","large_bone","tendon","animal_fat","manure"],
-  pig:["pork","pig_pelt","animal_fat","manure"]
+  pig:["pork","pig_pelt","animal_fat","manure"],
+  fish:["fish_meat"],
+  crab:["crab_meat","crab_shell"]
 };
 const FACILITY_DESCRIPTIONS={
+  fishery:"建造后可饲养鱼群与螃蟹，定期产出鱼肉与蟹肉",
+  aqueduct:"连通海水地块的水利设施，每日自动为避难所引流三份海水",
+  aqueduct_upgraded:"高级海水水渠，建成后替换水渠，每日稳定引流五份海水入库",
+  herb_field:"开垦后可播种新鲜药草，可升级为温室",
+  pasture:"自动收割草料与玉米饲料，可升级为温室",
   bonfire:"每日提供99次加热生产；开启时使当地实际温度上升2℃，每日基础消耗2点燃料",
   wood_stove:"篝火的升级设施，建成后替换篝火；可制作全部篝火配方和柴火灶专属配方，每日共用99次生产；开启时使当地实际温度上升2℃，幸福度增加1，每日基础消耗2点燃料",
   smokehouse:"每天可以晾晒99次，可加工干肉和干鱼",
@@ -806,12 +825,20 @@ function renderFarmControls(state){
     return `<div class="facility-subrow farm-plot-row" data-farm-bed="${bedId??""}"><div class="row-main"><strong>家养${crop.name}${conditionText}</strong><div class="row-detail">${status} · 施肥丰饶${plot.fertility}/5${fertilityStatus}${automationText?` · ${automationText}范围内`:""}</div>${careCost}</div><div class="row-actions farm-plot-actions">${ready?"":`<button class="action-button" data-action="water" data-plot="${plot.id}" ${plot.watered?"disabled":""}>浇水</button>${plot.fertility<5?`<button class="action-button" data-action="fertilize" data-plot="${plot.id}" ${plot.fertilized?"disabled":""}>施肥</button>`:""}`}<button class="action-button danger-button" data-action="uproot" data-plot="${plot.id}">拔除</button>${upgradeButton}${renderAutoFertilizeSwitch(bedId,index,autoFertilize)}</div></div>`;
   };
   const slottedPlotIds=new Set(slots.map(slot=>slot.plot?.id).filter(Boolean));
-  const rows=slots.map(slot=>slot.plot
+  let displayedSlots=slots;
+  let sectionTabs="";
+  if(capacity>10){
+    const currentSection=Math.max(0,Math.min(2,Number(state.farmSection??0)));
+    const sectionNames=["前圃","中圃","后圃"];
+    sectionTabs=`<div class="farm-section-tabs">${sectionNames.map((name,idx)=>`<button type="button" class="compact-button secondary-button${idx===currentSection?" active primary":""}" data-action="switch-farm-section" data-section="${idx}">${name}</button>`).join("")}</div>`;
+    displayedSlots=slots.slice(currentSection*10,currentSection*10+10);
+  }
+  const rows=displayedSlots.map(slot=>slot.plot
     ? renderPlotRow(slot.plot,slot.index,slot.bedId)
     : `<div class="facility-subrow farm-plot-row" data-farm-bed="${slot.bedId}"><div class="row-main"><strong>${slot.progress.greenhouse?"温室":"栽培地"} ${slot.index+1} · 空置</strong><div class="row-detail">${slot.progress.greenhouse?"温室升级永久保留，改种无需再次升级":"尚未种植作物"}</div>${slot.progress.damaged?`<div class="row-detail danger-text">栽培地已损坏，修复后才能播种</div>`:""}</div><div class="row-actions farm-plot-actions"><button class="action-button" data-action="choose-seed" data-bed="${slot.bedId}"${slot.progress.damaged?" disabled":""}>选择种子</button>${renderAutoFertilizeSwitch(slot.bedId,slot.index,getPlotAutoFertilizeStatus(state,slot.bedId))}</div></div>`
-  ).concat(plots.filter(plot=>!slottedPlotIds.has(plot.id)).map((plot,index)=>renderPlotRow(plot,slots.length+index))).join("");
+  ).join("");
   const emptyText=capacity?"":"先用泥土和肥料整理一块栽培地";
-  return `<div class="management-row-controls"><div class="row-detail">栽培地已用${plots.length}/${capacity}</div>${rows||`<span class="row-detail">${emptyText}</span>`}</div>`;
+  return `<div class="management-row-controls"><div class="row-detail">栽培地已用${plots.length}/${capacity}</div>${sectionTabs}${rows||`<span class="row-detail">${emptyText}</span>`}</div>`;
 }
 
 function miningMachineProductionDetails(state){
@@ -830,12 +857,16 @@ function renderPastureControls(state) {
   state.pastureByArea ??= {};
   const pasture = state.pastureByArea[state.position] ??= { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] };
   while ((pasture.plots?.length ?? 0) < 5) (pasture.plots ??= []).push({ growth: 0 });
+  const knowsGreenhouse = state.ownedBlueprintIds.includes(BUILDINGS.greenhouse?.blueprintId ?? "greenhouse");
+  const upgradeBtn = knowsGreenhouse && !pasture.greenhouse ? `<button class="action-button" data-action="upgrade-pasture-greenhouse">升级为温室</button>` : "";
   const rows = pasture.plots.map((plot, index) => {
     const days = Number(plot.growth || 0);
     const progressText = days >= 3 ? "已长满" : `生长中 ${days}/3天`;
     return `<div class="facility-subrow"><div class="row-main"><strong>草料地 ${index + 1}</strong><div class="row-detail">${progressText}</div></div><div class="row-actions"><span class="tag">自动照料</span></div></div>`;
   }).join("");
-  return `<div class="management-row-controls">${rows}</div>`;
+  const cornRows = `<div class="facility-subrow"><div class="row-main"><strong>玉米地 1-2</strong><div class="row-detail">每日自动收获并合成鱼饲料2份入库</div></div><div class="row-actions"><span class="tag">自动收获</span></div></div>`;
+  const headerStatus = `<div class="row-detail">${pasture.greenhouse ? "温室保护中" : "普通草场"}${upgradeBtn ? ` · ${upgradeBtn}` : ""}</div>`;
+  return `<div class="management-row-controls">${headerStatus}${rows}${cornRows}</div>`;
 }
 
 function renderHerbFieldControls(state) {
@@ -843,8 +874,11 @@ function renderHerbFieldControls(state) {
   const field = state.herbFieldsByArea[state.position] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
   const seedCount = countItem(state, "herb_seed");
   const waterCost = getOutdoorActionPreview(state, 0).weatherExtra ? 2 : 1;
+  const knowsGreenhouse = state.ownedBlueprintIds.includes(BUILDINGS.greenhouse?.blueprintId ?? "greenhouse");
+  const upgradeBtn = knowsGreenhouse && !field.greenhouse ? `<button class="action-button" data-action="upgrade-herb-greenhouse">升级为温室</button>` : "";
+  const greenhouseStatus = field.greenhouse ? " · 温室保护中" : "";
   if (!field.planted) {
-    return `<div class="management-row-controls"><div class="row-actions"><button class="action-button" data-action="plant-herb-field" ${seedCount > 0 ? "" : "disabled"}>播种草药种子</button></div></div>`;
+    return `<div class="management-row-controls"><div class="row-actions"><button class="action-button" data-action="plant-herb-field" ${seedCount > 0 ? "" : "disabled"}>播种草药种子</button>${upgradeBtn}</div>${greenhouseStatus ? `<div class="row-detail">${greenhouseStatus}</div>` : ""}</div>`;
   }
   const condition = field.mature
     ? "已成熟"
@@ -853,7 +887,7 @@ function renderHerbFieldControls(state) {
   const harvestButton = field.mature ? `<button class="action-button primary" data-action="harvest-herb-field">采收新鲜药草</button>` : "";
   const waterButton = (!field.mature && !field.watered) ? `<button class="action-button" data-action="water-herb-field">浇水</button>` : "";
   const fertilizeButton = (!field.mature && !field.fertilized && field.fertility < 5) ? `<button class="action-button" data-action="fertilize-herb-field">施肥</button>` : "";
-  return `<div class="management-row-controls"><div class="row-detail">${condition}</div>${careCost}<div class="row-actions">${harvestButton}${waterButton}${fertilizeButton}</div></div>`;
+  return `<div class="management-row-controls"><div class="row-detail">${condition}${greenhouseStatus}</div>${careCost}<div class="row-actions">${harvestButton}${waterButton}${fertilizeButton}${upgradeBtn}</div></div>`;
 }
 
 function renderBuiltFacilityRow(state,id,progress,includeFarmControls){
@@ -1095,8 +1129,10 @@ export function renderFacilities(state){
 }
 
 function itemGrid(stacks,source){
+  const isDouble=stacks.length>12;
   const tiles=stacks.map((stack,index)=>{const item=ITEMS[stack.itemId];return `<button type="button" class="item-tile" draggable="true" data-action="open-item" data-source="${source}" data-index="${index}" aria-label="查看${item.name}，数量${stack.quantity}"><span>${item.name}</span><strong>×${stack.quantity}</strong></button>`;}).join("");
-  return `<div class="item-grid${tiles?"":" empty-grid"}" data-inventory-location="${source}">${tiles||`<span class="item-grid-empty">空</span>`}</div>`;
+  const rowClass=isDouble?" item-grid-double":" item-grid-single";
+  return `<div class="item-grid${tiles?"":" empty-grid"}${rowClass}" data-inventory-location="${source}">${tiles||`<span class="item-grid-empty">空</span>`}</div>`;
 }
 
 export function captureInventoryScrollPositions(root){
@@ -1119,6 +1155,20 @@ export function getEquipmentCollapsed() {
   }
 }
 
+function isInvSectionCollapsed(key) {
+  try {
+    return localStorage.getItem(`inv_section_collapsed_${key}`) === "1";
+  } catch (e) {
+    return false;
+  }
+}
+
+function collapsibleInventoryCard(key, title, body, className = "", action = "") {
+  const collapsed = isInvSectionCollapsed(key);
+  const toggle = `<button type="button" class="collapsible-card-toggle" data-action="toggle-inventory-section" data-section="${key}"><span>${title}</span><span class="production-station-toggle-hint"><span class="production-station-toggle-label">${collapsed ? "展开" : "收起"}</span><span class="production-station-toggle-icon" aria-hidden="true">⌃</span></span></button>`;
+  return `<section class="card ${className} collapsible-inventory-card${collapsed ? " collapsed" : ""}" data-inventory-section="${key}"><div class="card-header collapsible-card-header"><h3>${toggle}</h3>${action}</div><div class="card-body"${collapsed ? " hidden" : ""}>${body}</div></section>`;
+}
+
 export function renderEquipment(state) {
   const inv = getInventoryView(state);
   const backpackCapacity=getBackpackCapacity(state);
@@ -1130,16 +1180,16 @@ export function renderEquipment(state) {
   const survivalMetrics=getSurvivalMetrics(state).map(metric=>`<button type="button" class="survival-metric-button" data-action="open-survival-metric" data-metric="${metric.id}" aria-label="查看${metric.label}${["injury","disease"].includes(metric.id)?"状态":"来源"}"><span>${metric.label}</span><strong>${formatSurvivalMetricValue(metric)}</strong></button>`).join("");
   const isCollapsed = getEquipmentCollapsed();
   const equipmentCard = `<section class="card wide equipment-card${isCollapsed ? " collapsed" : ""}" data-equipment-card="equipment"><div class="card-header production-station-header"><h3><button type="button" class="production-station-toggle" data-action="toggle-equipment-collapse" aria-expanded="${!isCollapsed}"><span>装备</span><span class="production-station-toggle-hint"><span class="production-station-toggle-label">${isCollapsed ? "展开" : "收起"}</span><span class="production-station-toggle-icon" aria-hidden="true">⌃</span></span></button></h3></div><div class="card-body equipment-card-body"${isCollapsed ? " hidden" : ""}><div class="equipment-slot-grid">${equipped}</div></div></section>`;
-  return card("生存数值", `<div class="survival-metric-grid">${survivalMetrics}</div><div class="row-actions"><button class="action-button compact-button" data-action="open-wound-treatment">处理伤口</button><button class="action-button compact-button" data-action="use-medical" data-item="medicine">使用药剂</button></div>`) +
+  return collapsibleInventoryCard("survival", "生存数值", `<div class="survival-metric-grid">${survivalMetrics}</div><div class="row-actions"><button class="action-button compact-button" data-action="open-wound-treatment">处理伤口</button><button class="action-button compact-button" data-action="use-medical" data-item="medicine">使用药剂</button></div>`) +
     equipmentCard +
-    card(`背包保鲜格 ${inv.cold.length}/${backpackCapacity.cold}`, itemGrid(inv.cold, "cold")) +
-    card(`背包普通格 ${inv.ordinary.length}/${backpackCapacity.ordinary}`, `<p class="row-detail">拖动物品可调整顺序或换行存放；手机上长按后拖动。</p>${itemGrid(inv.ordinary, "ordinary")}`, "", `<button type="button" class="compact-button secondary-button" data-action="consolidate-backpack">整理</button>`) +
-    (wardrobeCapacity||inv.wardrobe.length?card(`衣帽间 ${inv.wardrobe.length}/${wardrobeCapacity}`,itemGrid(inv.wardrobe,"wardrobe")):"") +
-    (seedStorageCapacity||inv.seedStorage.length?card(`本地种子储存室 ${inv.seedStorage.length}/${seedStorageCapacity}`,`<p class="row-detail">只能存放种子</p>${itemGrid(inv.seedStorage,"seed-storage")}`):"") +
-    (utilityStorageCapacity||inv.utilityStorage.length?card(`本地杂物间 ${inv.utilityStorage.length}/${utilityStorageCapacity}`,`<p class="row-detail">只能存放家具和工具（含便携生产工具）</p>${itemGrid(inv.utilityStorage,"utility-storage")}`):"") +
-    card(`本地保鲜库 ${inv.localCold.length}/${getColdStorageCapacity(state)}`, itemGrid(inv.localCold, "local-cold")) +
-    card(`本地储存库 ${inv.storage.length}/${getStorageCapacity(state,state.position)}`, itemGrid(inv.storage, "storage")) +
-    card(`地面物品 ${inv.ground.length}`, itemGrid(inv.ground, "ground"), "wide");
+    collapsibleInventoryCard("cold", `背包保鲜格 ${inv.cold.length}/${backpackCapacity.cold}`, itemGrid(inv.cold, "cold")) +
+    collapsibleInventoryCard("ordinary", `背包普通格 ${inv.ordinary.length}/${backpackCapacity.ordinary}`, `<p class="row-detail">拖动物品可调整顺序或换行存放；手机上长按后拖动。</p>${itemGrid(inv.ordinary, "ordinary")}`, "", `<button type="button" class="compact-button secondary-button" data-action="consolidate-backpack">整理</button>`) +
+    (wardrobeCapacity||inv.wardrobe.length?collapsibleInventoryCard("wardrobe", `衣帽间 ${inv.wardrobe.length}/${wardrobeCapacity}`, itemGrid(inv.wardrobe, "wardrobe")):"") +
+    (seedStorageCapacity||inv.seedStorage.length?collapsibleInventoryCard("seed-storage", `本地种子储存室 ${inv.seedStorage.length}/${seedStorageCapacity}`, `<p class="row-detail">只能存放种子</p>${itemGrid(inv.seedStorage, "seed-storage")}`, "", `<button type="button" class="compact-button secondary-button" data-action="store-all-seeds">收纳</button>`):"") +
+    (utilityStorageCapacity||inv.utilityStorage.length?collapsibleInventoryCard("utility-storage", `本地杂物间 ${inv.utilityStorage.length}/${utilityStorageCapacity}`, `<p class="row-detail">只能存放家具和工具（含便携生产工具）</p>${itemGrid(inv.utilityStorage, "utility-storage")}`):"") +
+    collapsibleInventoryCard("local-cold", `本地保鲜库 ${inv.localCold.length}/${getColdStorageCapacity(state)}`, itemGrid(inv.localCold, "local-cold")) +
+    collapsibleInventoryCard("storage", `本地储存库 ${inv.storage.length}/${getStorageCapacity(state, state.position)}`, itemGrid(inv.storage, "storage")) +
+    collapsibleInventoryCard("ground", `地面物品 ${inv.ground.length}`, itemGrid(inv.ground, "ground"), "wide");
 }
 
 function getSurvivalMetrics(state){

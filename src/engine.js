@@ -154,8 +154,8 @@ const DAILY_LOTTERY_WATER_ASSIST_CHANCE=.5;
 export const D4_LOW_FOOD_APPLE_CHANCE=.5;
 export const FEED_ANIMALS_STAMINA_COST=LIVESTOCK_FEED_STAMINA_COST;
 export const LIVESTOCK_STARVATION_DAYS=10;
-const ANIMAL_PEN_IDS=Object.freeze({chicken:"chicken_coop",sheep:"sheep_pen",cattle:"cattle_pen",pig:"pig_pen"});
-const AUTOMATIC_FEED_ORDER=Object.freeze(["pig","cattle","sheep","chicken"]);
+const ANIMAL_PEN_IDS=Object.freeze({chicken:"chicken_coop",sheep:"sheep_pen",cattle:"cattle_pen",pig:"pig_pen",fish:"fishery",crab:"fishery"});
+const AUTOMATIC_FEED_ORDER=Object.freeze(["pig","cattle","sheep","chicken","fish","crab"]);
 // 好感折扣调整只作用于新报价，保留定价版本以免刷新玩家已有交易。
 const TRADE_PRICING_RULE_VERSION=90;
 const WEATHER_TRADE_RULE_VERSION=6;
@@ -3078,6 +3078,40 @@ export function upgradePlotToGreenhouse(state,plotId){
   return {ok:true,message:"这块栽培地已升级为温室",weatherExposure:resolveWeatherSicknessExposure(state,state.position)};
 }
 
+export function upgradePastureToGreenhouse(state, areaId = state.position) {
+  if (!completedInstances(state, areaId, "pasture").length) return { ok: false, message: "当地没有建好的草场" };
+  const definition = BUILDINGS.greenhouse;
+  if (!state.ownedBlueprintIds.includes(definition.blueprintId ?? "greenhouse")) return { ok: false, message: "尚未获得温室蓝图" };
+  const pasture = getPastureStatus(state, areaId);
+  if (pasture.greenhouse) return { ok: false, message: "草场已经是温室" };
+  if (!hasInputs(state, definition.inputs)) return { ok: false, message: "升级温室的材料不足" };
+  if (state.player.stamina < definition.stamina) return { ok: false, message: `体力不足，需要${formatStamina(definition.stamina)}` };
+  settleCurrentAreaResourcesForAction(state);
+  consumeInputs(state, definition.inputs);
+  state.player.stamina = roundStamina(state.player.stamina - definition.stamina);
+  pasture.greenhouse = true;
+  progressTasks(state, "build", 1);
+  addLog(state, `${areaId}的草场升级成了温室。`);
+  return { ok: true, message: "草场已升级为温室", weatherExposure: resolveWeatherSicknessExposure(state, areaId) };
+}
+
+export function upgradeHerbFieldToGreenhouse(state, areaId = state.position) {
+  if (!completedInstances(state, areaId, "herb_field").length) return { ok: false, message: "当地没有建好的药田" };
+  const definition = BUILDINGS.greenhouse;
+  if (!state.ownedBlueprintIds.includes(definition.blueprintId ?? "greenhouse")) return { ok: false, message: "尚未获得温室蓝图" };
+  const field = getHerbFieldStatus(state, areaId);
+  if (field.greenhouse) return { ok: false, message: "药田已经是温室" };
+  if (!hasInputs(state, definition.inputs)) return { ok: false, message: "升级温室的材料不足" };
+  if (state.player.stamina < definition.stamina) return { ok: false, message: `体力不足，需要${formatStamina(definition.stamina)}` };
+  settleCurrentAreaResourcesForAction(state);
+  consumeInputs(state, definition.inputs);
+  state.player.stamina = roundStamina(state.player.stamina - definition.stamina);
+  field.greenhouse = true;
+  progressTasks(state, "build", 1);
+  addLog(state, `${areaId}的药田升级成了温室。`);
+  return { ok: true, message: "药田已升级为温室", weatherExposure: resolveWeatherSicknessExposure(state, areaId) };
+}
+
 export function getPastureStatus(state, areaId = state.position) {
   state.pastureByArea ??= {};
   const pasture = state.pastureByArea[areaId] ??= { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] };
@@ -3187,6 +3221,18 @@ function resolvePastureAndHerb(state, summary) {
         summary.push(`${areaId}：草场自动收割草料并转化为饲料${feedGained}份存入当地储存库`);
         addLog(state, `${areaId}：草场自动收割成熟草料，制作并入库饲料${feedGained}份。`);
       }
+      addItem(state, "corn", 2, { areaId });
+      addItem(state, "fish_feed", 2, { areaId });
+      summary.push(`${areaId}：草场扩建玉米地自动收获玉米并合成鱼饲料2份`);
+      addLog(state, `${areaId}：草场玉米地自动收获并合成鱼饲料2份存入仓库。`);
+    }
+    const aqueducts = completedInstances(state, areaId, "aqueduct");
+    const upgradedAqueducts = completedInstances(state, areaId, "aqueduct_upgraded");
+    const seawaterGained = aqueducts.length * 3 + upgradedAqueducts.length * 5;
+    if (seawaterGained > 0) {
+      addItem(state, "seawater", seawaterGained, { areaId });
+      summary.push(`${areaId}：水渠引流海水${seawaterGained}份存入当地储存库`);
+      addLog(state, `${areaId}：水渠引流海水${seawaterGained}份存入储存库。`);
     }
     if (completedInstances(state, areaId, "herb_field").length > 0) {
       state.herbFieldsByArea ??= {};
@@ -3428,6 +3474,15 @@ export function gatherNode(state, nodeId, methodId, acceptRisk = false) {
   }
   const gains=[{itemId:node.output,quantity:gatheredQuantity}];
   addItem(state, node.output, gatheredQuantity);
+  if(node.output==="fish"||nodeState.nodeId==="fish_school"||nodeState.nodeId==="large_fish_school"){
+    const trapStack=[state.backpack.cold,state.backpack.ordinary].find(stacks=>stacks.some(stack=>stack.itemId==="trap"&&stack.quantity>0))?.find(stack=>stack.itemId==="trap"&&stack.quantity>0);
+    if(trapStack&&randomFromKey(getGameplaySeed(state),`fish-trap:${state.position}:${nodeState.id}:${state.day}:${state.actionIndex}`)<.25){
+      takeFromStack(trapStack,1);
+      addItem(state,"fry",1);
+      gains.push({itemId:"fry",quantity:1});
+      addLog(state,"消耗捕兽笼×1，成功捕获鱼苗×1。");
+    }
+  }
   if(CROPS[node.output]){
     const crop=CROPS[node.output],seedId=crop.seedId;let seedQuantity=0;
     const treeCrop=node.output==="apple";
@@ -3634,6 +3689,15 @@ export function fightEnemy(state, enemyId, sourceNodeId=null, acceptRisk=false) 
     if (enemy.rareChance && randomFromKey(getGameplaySeed(state),`${battleKey}:rare`) < enemy.rareChance) {
       const rareId=weightedObjectPick(enemy.rare,getGameplaySeed(state),`${battleKey}:rare-kind`); addItem(state,rareId,1); loot.push(`${ITEMS[rareId].name}×1（稀有）`);
     }
+    if (enemyId === "giant_crab") {
+      const largeTrapStack = [state.backpack.cold, state.backpack.ordinary].find(stacks => stacks.some(stack => stack.itemId === "large_trap" && stack.quantity > 0))?.find(stack => stack.itemId === "large_trap" && stack.quantity > 0);
+      if (largeTrapStack && randomFromKey(getGameplaySeed(state), `${battleKey}:crab-larva`) < .25) {
+        takeFromStack(largeTrapStack, 1);
+        addItem(state, "crab_larva", 1);
+        loot.push("蟹苗×1");
+        addLog(state, "消耗大型捕兽笼×1，成功捕获蟹苗×1。");
+      }
+    }
     if (sourceNodeId) { const node=state.areas[state.position].nodes[sourceNodeId]; node.charges=0; node.respawnRemaining=0; }
     if(enemy.boss&&!state.uniqueDrops.includes(enemyId))state.uniqueDrops.push(enemyId);
     addLog(state,`击败${enemy.name}，获得${loot.join("、")||"无额外掉落"}。`);
@@ -3677,6 +3741,20 @@ export function getBuildOptions(state) {
   return options;
 }
 
+export function getDistanceToSeawater(areaId = "A1") {
+  const r1 = areaId.charCodeAt(0) - 65;
+  const c1 = Number(areaId.slice(1)) - 1;
+  const SEAWATER_AREAS = ["A6", "B6", "B7", "C5", "C6", "C7", "D7", "E7", "F7"];
+  let min = 999;
+  for (const sea of SEAWATER_AREAS) {
+    const r2 = sea.charCodeAt(0) - 65;
+    const c2 = Number(sea.slice(1)) - 1;
+    const dist = Math.abs(r1 - r2) + Math.abs(c1 - c2);
+    if (dist < min) min = dist;
+  }
+  return min;
+}
+
 export function buildStep(state, buildingId, acceptRisk = false) {
   const baseId = buildingId.replace(/__\d+$/, "");
   const definition = BUILDINGS[baseId];
@@ -3690,7 +3768,10 @@ export function buildStep(state, buildingId, acceptRisk = false) {
   if(definition.requiredDevice&&!(state.devicesByArea[areaId]??[]).some(device=>device.itemId===definition.requiredDevice))return {ok:false,message:"当地缺少所需生产设备"};
   const progress = state.buildingsByArea[areaId][buildingId] ?? { progress: 0, completed: false };
   if (progress.completed) return { ok: false, message: "已经完成" };
-  const inputOptions=[definition.inputs,...(definition.alternatives??[])];
+  const baseInputs = baseId === "aqueduct"
+    ? { stone_brick: 3 + getDistanceToSeawater(areaId), wood: 3 + getDistanceToSeawater(areaId) }
+    : definition.inputs;
+  const inputOptions=[baseInputs,...(definition.alternatives??[])];
   const selectedInputs=inputOptions.find(inputs=>hasInputs(state,inputs));
   if (!selectedInputs) return { ok: false, message: "材料不足" };
   const cost = resolveOutdoorCost(state, definition.stamina, acceptRisk);
@@ -5216,6 +5297,10 @@ export function endDay(state, force = false) {
 
   state.day += 1;
   state.gridPowerSpentToday=0;
+  state.yesterdayDiet = {
+    food: consumedFood ? consumedFood.itemId : (state.selectedFood?.itemId ?? null),
+    drink: consumedDrink ? consumedDrink.itemId : (state.selectedDrink?.itemId ?? null)
+  };
   state.selectedFood = null;
   state.selectedDrink = null;
   state.dailyRewardClaimed = false;
@@ -5377,4 +5462,73 @@ export function consolidateBackpack(state) {
     addLog(state, "整理了背包物资。");
   }
   return { ok: true, transferredCount };
+}
+
+export function applyYesterdayDiet(state) {
+  const yesterday = state.yesterdayDiet;
+  if (!yesterday || (!yesterday.food && !yesterday.drink)) {
+    return { ok: true, changed: false };
+  }
+  let appliedFood = false;
+  let appliedDrink = false;
+  if (yesterday.food) {
+    const res = selectConsumableFrom(state, yesterday.food);
+    if (res.ok) appliedFood = true;
+  }
+  if (yesterday.drink) {
+    const res = selectConsumableFrom(state, yesterday.drink);
+    if (res.ok) appliedDrink = true;
+  }
+  return { ok: true, changed: appliedFood || appliedDrink };
+}
+
+export function storeAllSeeds(state) {
+  const areaId = state.position;
+  const capacity = getSeedStorageCapacity(state, areaId);
+  if (capacity <= 0) return { ok: false, message: "当地没有种子储存室" };
+  state.seedStorageByArea ??= {};
+  const seedStorage = state.seedStorageByArea[areaId] ??= [];
+  let transferredCount = 0;
+
+  const sources = [
+    state.backpack.ordinary,
+    state.backpack.cold,
+    state.storageByArea[areaId] ??= [],
+    state.groundByArea[areaId] ??= []
+  ];
+
+  for (const stacks of sources) {
+    for (let i = stacks.length - 1; i >= 0; i--) {
+      const stack = stacks[i];
+      if (!stack || stack.quantity <= 0) {
+        stacks.splice(i, 1);
+        continue;
+      }
+      const item = ITEMS[stack.itemId];
+      if (item?.type !== "seed") continue;
+
+      const existing = seedStorage.find(s => s.itemId === stack.itemId);
+      if (existing) {
+        mergeStackQuantities(existing, stack);
+        stacks.splice(i, 1);
+        transferredCount++;
+        continue;
+      }
+
+      if (seedStorage.length < capacity) {
+        seedStorage.push(stack);
+        stacks.splice(i, 1);
+        transferredCount++;
+      }
+    }
+  }
+
+  if (transferredCount > 0) {
+    addLog(state, "已将地块与背包中的种子收纳进储存室。");
+  }
+  return {
+    ok: true,
+    transferredCount,
+    message: transferredCount > 0 ? "已收纳种子" : "暂无可收纳种子"
+  };
 }
