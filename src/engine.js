@@ -534,6 +534,8 @@ export function createNewGame(seed = `${Date.now()}`) {
     reinforcementDurationRuleVersion: REINFORCEMENT_DURATION_RULE_VERSION,
     fuelPointsByArea: Object.fromEntries(Object.keys(AREAS).map((id) => [id, 0])),
     farmSuppliesByArea: Object.fromEntries(Object.keys(AREAS).map((id) => [id, { fertilizer: 0 }])),
+    pastureByArea: Object.fromEntries(Object.keys(AREAS).map((id) => [id, { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] }])),
+    herbFieldsByArea: Object.fromEntries(Object.keys(AREAS).map((id) => [id, { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false }])),
     automaticWaterStorageRuleVersion: AUTOMATIC_WATER_STORAGE_RULE_VERSION,
     farmFertilityRuleVersion: FARM_FERTILITY_RULE_VERSION,
     cropRegrowthRuleVersion: CROP_REGROWTH_RULE_VERSION,
@@ -722,7 +724,7 @@ export function deserializeState(text) {
   state.randomRevision = getRandomRevision(state);
   hydrateAreaNodes(state);
   const defaults = createNewGame(state.seed);
-  for (const key of ["coldStorageByArea","wardrobeByArea","devicesByArea","furnitureByArea","plotsByArea","animalsByArea","powerByArea","facilityOperationByArea","reinforcementByArea","fuelPointsByArea","farmSuppliesByArea","uniqueDrops","relations","tradeOffers","claimedMailIds","productionUsage","returnProgress","survivalHistory"]) state[key] ??= clone(defaults[key]);
+  for (const key of ["coldStorageByArea","wardrobeByArea","devicesByArea","furnitureByArea","plotsByArea","animalsByArea","powerByArea","facilityOperationByArea","reinforcementByArea","fuelPointsByArea","farmSuppliesByArea","pastureByArea","herbFieldsByArea","uniqueDrops","relations","tradeOffers","claimedMailIds","productionUsage","returnProgress","survivalHistory"]) state[key] ??= clone(defaults[key]);
   for(const [npcId,relation] of Object.entries(defaults.relations))state.relations[npcId]??=clone(relation);
   hydrateDerivedSaveFields(state);
   unlockHouseSchemes(state);
@@ -860,8 +862,8 @@ export function deserializeState(text) {
     state.dailyTasks=generateDailyTasks(state);
     if(state.dailyRewardClaimed)for(const task of state.dailyTasks)task.progress=task.target;
   }
-  if((state.dailyTasks??[]).some(task=>task.id==="move_two"||task.event==="move")){
-    const kept=state.dailyTasks.filter(task=>task.id!=="move_two"&&task.event!=="move"),keptIds=new Set(kept.map(task=>task.id));
+  if((state.dailyTasks??[]).some(task=>task.id==="move_two"||task.event==="move"||task.id==="maintain_repair"||task.event==="repair")){
+    const kept=state.dailyTasks.filter(task=>task.id!=="move_two"&&task.event!=="move"&&task.id!=="maintain_repair"&&task.event!=="repair"),keptIds=new Set(kept.map(task=>task.id));
     const replacements=generateDailyTasks(state).filter(task=>!keptIds.has(task.id));
     state.dailyTasks=[...kept,...replacements].slice(0,3);
     if(state.dailyRewardClaimed)for(const task of state.dailyTasks)task.progress=task.target;
@@ -2030,7 +2032,7 @@ export function getStorageCapacity(state, areaId) {
 }
 
 export function getColdStorageCapacity(state, areaId = state.position) {
-  const passive = ["cellar","cellar_expansion"].reduce((total,id)=>total+completedInstances(state,areaId,id).length*Number(BUILDINGS[id]?.effect?.coldStorage??0),0);
+  const passive = ["cellar","cellar_expansion","ice_cellar"].reduce((total,id)=>total+completedInstances(state,areaId,id).length*Number(BUILDINGS[id]?.effect?.coldStorage??0),0);
   const refrigerators = (state.furnitureByArea?.[areaId] ?? [])
     .filter((entry) => entry.itemId === "fridge" && entry.enabled !== false).length * Number(FURNITURE.fridge?.effect?.coldStorage ?? 0);
   return passive + refrigerators;
@@ -2059,7 +2061,7 @@ export function getBackpackCapacity(state) {
 }
 
 function getPassiveColdStorageCapacity(state, areaId) {
-  return ["cellar","cellar_expansion"].reduce((total,id)=>total+completedInstances(state,areaId,id).length*Number(BUILDINGS[id]?.effect?.coldStorage??0),0);
+  return ["cellar","cellar_expansion","ice_cellar"].reduce((total,id)=>total+completedInstances(state,areaId,id).length*Number(BUILDINGS[id]?.effect?.coldStorage??0),0);
 }
 
 export function addItem(state, itemId, quantity, options = {}) {
@@ -2604,7 +2606,26 @@ export function equipItem(state, itemId) {
   consumeItem(state,itemId,1);
   const old = state.player.equipment[gear.slot];
   state.player.equipment[gear.slot]=itemId;
-  if (old && !["ordinary_clothes","system_small_backpack"].includes(old)) addItem(state,old,1);
+  if (old && !["ordinary_clothes","system_small_backpack"].includes(old)) {
+    if (gear.slot === "weapon") {
+      const newLevel = Number(gear.weaponLevel ?? gear.tier ?? 0);
+      const oldGear = EQUIPMENT[old] ?? ITEMS[old];
+      const oldLevel = Number(oldGear?.weaponLevel ?? oldGear?.tier ?? 0);
+      let routedToUtility = false;
+      if (newLevel > oldLevel) {
+        const utilityCap = getUtilityStorageCapacity(state, state.position);
+        const utilityStacks = state.utilityStorageByArea[state.position] ??= [];
+        if (utilityCap > 0 && utilityStacks.length < utilityCap) {
+          utilityStacks.push({ itemId: old, quantity: 1 });
+          routedToUtility = true;
+          addLog(state, `将换下的${oldGear?.name ?? old}存入了杂货库。`);
+        }
+      }
+      if (!routedToUtility) addItem(state, old, 1);
+    } else {
+      addItem(state, old, 1);
+    }
+  }
   return {ok:true};
 }
 
@@ -3057,6 +3078,141 @@ export function upgradePlotToGreenhouse(state,plotId){
   return {ok:true,message:"这块栽培地已升级为温室",weatherExposure:resolveWeatherSicknessExposure(state,state.position)};
 }
 
+export function getPastureStatus(state, areaId = state.position) {
+  state.pastureByArea ??= {};
+  const pasture = state.pastureByArea[areaId] ??= { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] };
+  while ((pasture.plots?.length ?? 0) < 5) (pasture.plots ??= []).push({ growth: 0 });
+  return pasture;
+}
+
+export function getHerbFieldStatus(state, areaId = state.position) {
+  state.herbFieldsByArea ??= {};
+  const field = state.herbFieldsByArea[areaId] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
+  return field;
+}
+
+export function plantHerbField(state, areaId = state.position) {
+  if (!completedInstances(state, areaId, "herb_field").length) return { ok: false, message: "当地没有建好的药田" };
+  state.herbFieldsByArea ??= {};
+  const field = state.herbFieldsByArea[areaId] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
+  if (field.planted) return { ok: false, message: "药田已经种植了草药" };
+  if (countItem(state, "herb_seed") < 1) return { ok: false, message: "缺少草药种子" };
+  if (state.player.stamina < 0.5) return { ok: false, message: "体力不足，需要0.5" };
+  settleCurrentAreaResourcesForAction(state);
+  consumeItem(state, "herb_seed", 1);
+  state.player.stamina = roundStamina(state.player.stamina - 0.5);
+  field.planted = true;
+  field.remaining = 5;
+  field.watered = false;
+  field.fertilized = false;
+  field.fertility = 0;
+  field.mature = false;
+  addLog(state, "在药田种下了草药种子。");
+  return { ok: true, message: "草药种子已种在药田", weatherExposure: resolveWeatherSicknessExposure(state, state.position) };
+}
+
+export function waterHerbField(state, areaId = state.position) {
+  if (!completedInstances(state, areaId, "herb_field").length) return { ok: false, message: "当地没有建好的药田" };
+  state.herbFieldsByArea ??= {};
+  const field = state.herbFieldsByArea[areaId] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
+  if (!field.planted) return { ok: false, message: "药田尚未播种" };
+  if (field.mature) return { ok: false, message: "草药已成熟，无需浇水" };
+  if (field.watered) return { ok: false, message: "今天已经浇过水" };
+  const cost = getPlotEnvironmentEffects(state, { id: "herb_field" }, areaId).heatAffected ? 2 : 1;
+  if (countItem(state, "water") < cost || state.player.stamina < 0.2) return { ok: false, message: "缺少水或体力不足" };
+  settleCurrentAreaResourcesForAction(state);
+  consumeItem(state, "water", cost);
+  state.player.stamina = roundStamina(state.player.stamina - 0.2);
+  field.watered = true;
+  progressTasks(state, "water", 1);
+  addLog(state, "为药田进行了浇水。");
+  return { ok: true, message: "已给药田浇水", weatherExposure: resolveWeatherSicknessExposure(state, state.position) };
+}
+
+export function fertilizeHerbField(state, areaId = state.position) {
+  if (!completedInstances(state, areaId, "herb_field").length) return { ok: false, message: "当地没有建好的药田" };
+  state.herbFieldsByArea ??= {};
+  const field = state.herbFieldsByArea[areaId] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
+  if (!field.planted) return { ok: false, message: "药田尚未播种" };
+  if (field.mature) return { ok: false, message: "草药已成熟，无需施肥" };
+  if (field.fertilized) return { ok: false, message: "今天不能再施肥" };
+  if (field.fertility >= 5) return { ok: false, message: "丰饶已满，无需施肥" };
+  if (countItem(state, "fertilizer") < 1 || state.player.stamina < 0.2) return { ok: false, message: "缺少肥料或体力不足" };
+  settleCurrentAreaResourcesForAction(state);
+  consumeItem(state, "fertilizer", 1);
+  state.player.stamina = roundStamina(state.player.stamina - 0.2);
+  field.fertilized = true;
+  addLog(state, "为药田进行了施肥。");
+  return { ok: true, message: "已给药田施肥", weatherExposure: resolveWeatherSicknessExposure(state, state.position) };
+}
+
+export function harvestHerbField(state, areaId = state.position) {
+  if (!completedInstances(state, areaId, "herb_field").length) return { ok: false, message: "当地没有建好的药田" };
+  state.herbFieldsByArea ??= {};
+  const field = state.herbFieldsByArea[areaId] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
+  if (!field.planted || !field.mature) return { ok: false, message: "药田尚未成熟" };
+  if (state.player.stamina < 0.5) return { ok: false, message: "体力不足，需要0.5" };
+  settleCurrentAreaResourcesForAction(state);
+  state.player.stamina = roundStamina(state.player.stamina - 0.5);
+  const yieldCount = 3 + Math.floor(Number(field.fertility || 0) / 2);
+  addItem(state, "fresh_herb", yieldCount);
+  addItem(state, "herb_seed", 1);
+  field.planted = false;
+  field.mature = false;
+  field.remaining = 5;
+  field.fertility = 0;
+  field.watered = false;
+  field.fertilized = false;
+  progressTasks(state, "harvest", 1);
+  addLog(state, "从药田收获了新鲜药草与草药种子。");
+  return { ok: true, message: "收获了新鲜药草与草药种子", weatherExposure: resolveWeatherSicknessExposure(state, state.position, { ignoreHouse: true }) };
+}
+
+function resolvePastureAndHerb(state, summary) {
+  for (const areaId of Object.keys(AREAS)) {
+    if (completedInstances(state, areaId, "pasture").length > 0) {
+      state.pastureByArea ??= {};
+      const pasture = state.pastureByArea[areaId] ??= { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] };
+      while ((pasture.plots?.length ?? 0) < 5) (pasture.plots ??= []).push({ growth: 0 });
+      let feedGained = 0;
+      for (const plot of pasture.plots) {
+        plot.growth = (plot.growth || 0) + 1;
+        if (plot.growth >= 3) {
+          plot.growth = 0;
+          feedGained += 2;
+        }
+      }
+      if (feedGained > 0) {
+        addItem(state, "feed", feedGained, { areaId });
+        summary.push(`${areaId}：草场自动收割草料并转化为饲料${feedGained}份存入当地储存库`);
+        addLog(state, `${areaId}：草场自动收割成熟草料，制作并入库饲料${feedGained}份。`);
+      }
+    }
+    if (completedInstances(state, areaId, "herb_field").length > 0) {
+      state.herbFieldsByArea ??= {};
+      const field = state.herbFieldsByArea[areaId] ??= { planted: false, remaining: 5, watered: false, fertilized: false, fertility: 0, mature: false };
+      if (field.planted && !field.mature) {
+        if (!field.watered && consumeLocalStorageItem(state, "water", 1, areaId)) {
+          field.watered = true;
+        }
+        if (field.watered) {
+          field.remaining -= 1;
+          if (field.fertilized) {
+            field.fertility = Math.min(5, (field.fertility || 0) + 1);
+          }
+          if (field.remaining <= 0) {
+            field.mature = true;
+            summary.push(`${areaId}：药田里的新鲜药草已经成熟`);
+            addLog(state, `${areaId}：药田里的新鲜药草已经成熟，可以采收。`);
+          }
+        }
+        field.watered = false;
+        field.fertilized = false;
+      }
+    }
+  }
+}
+
 function applyFarmAutomation(state,areaId,plots,summary){
   const coverage=getFarmAutomationCoverage(state,areaId),supply=state.farmSuppliesByArea[areaId]??={fertilizer:0};
   let watered=0,waterUsed=0,waterShortage=0;
@@ -3503,14 +3659,17 @@ export function getBuildOptions(state) {
   for (const [id, definition] of Object.entries(BUILDINGS)) {
     if (definition.houseLevel || definition.fixedOnly || definition.plotUpgrade || id === "return_tower") continue;
     if (houseLevel === 0 && !definition.noHouseRequired) continue;
-    if (!state.ownedBlueprintIds.includes(definition.blueprintId ?? id)) continue;
+    if (!definition.noBlueprintRequired && !state.ownedBlueprintIds.includes(definition.blueprintId ?? id)) continue;
     if(definition.allowedAreas?.length&&!definition.allowedAreas.includes(areaId))continue;
     if(!hasRequiredFurniture(state,areaId,definition))continue;
     if ((definition.houseTier ?? 0) > houseLevel) continue;
     const replacedByCompletedUpgrade=Object.entries(BUILDINGS).some(([upgradeId,upgrade])=>upgrade.replaces===id&&Object.entries(state.buildingsByArea[areaId]??{}).some(([buildingId,progress])=>buildingId.replace(/__\d+$/u,"")===upgradeId&&progress.completed));
     if(replacedByCompletedUpgrade)continue;
     const existing = Object.entries(state.buildingsByArea[areaId]).filter(([key]) => key === id || key.startsWith(`${id}__`));
-    const max = definition.maxPerArea ?? 1;
+    let max = definition.maxPerArea ?? 1;
+    if (id === "planting_bed" && completedInstances(state, areaId, "farm_expansion").length > 0) {
+      max = 30;
+    }
     const unfinished = existing.find(([,value]) => !value.completed);
     if (unfinished) options.push([unfinished[0], definition]);
     else if (existing.length < max) options.push([existing.length ? `${id}__${existing.length + 1}` : id, definition]);
@@ -3816,7 +3975,7 @@ export function generateDailyTasks(state) {
     ...getDailyGatherTaskTemplates(state),
     {id:"explore_once",family:"探索",text:"完成1次探索",target:1,event:"explore",outdoor:true,ok:()=>true},{id:"explore_three",family:"探索",text:"完成3次探索",target:3,event:"explore",outdoor:true,ok:()=>state.player.maxStamina>=9},
     {id:"manage_water",family:"经营",text:"给家养资源点浇水1次",target:1,event:"water",outdoor:true,ok:()=>state.plotsByArea[state.position].some(p=>!p.watered&&p.phase!=="ready")&&countItem(state,"water")>0},{id:"manage_feed",family:"经营",text:"喂养任意栏舍",target:1,event:"feed",outdoor:true,ok:()=>Object.keys(ANIMAL_PEN_IDS).some(type=>getAnimalPenSlots(state,type).some(canFeedAnimalPen))},{id:"manage_harvest",family:"经营",text:"收获家养资源点1次",target:1,event:"harvest",outdoor:true,ok:()=>state.plotsByArea[state.position].some(p=>p.phase==="ready"&&p.charges>0)},
-    {id:"maintain_stamina",family:"维护",text:"结束今天时剩余体力不小于1",target:1,event:"stamina_end",endOfDay:true,ok:()=>true},{id:"maintain_repair",family:"维护",text:"修复1个设施",target:1,event:"repair",outdoor:true,ok:()=>Object.values(state.buildingsByArea).some(b=>Object.values(b).some(p=>p.damaged))},{id:"maintain_device",family:"维护",text:"开启环境设备并结束今天",target:1,event:"device_end",endOfDay:true,ok:()=>state.furnitureByArea[state.position].some(f=>FURNITURE[f.itemId]?.switchable&&f.enabled!==false)}
+    {id:"maintain_stamina",family:"维护",text:"结束今天时剩余体力不小于1",target:1,event:"stamina_end",endOfDay:true,ok:()=>true},{id:"maintain_device",family:"维护",text:"开启环境设备并结束今天",target:1,event:"device_end",endOfDay:true,ok:()=>state.furnitureByArea[state.position].some(f=>FURNITURE[f.itemId]?.switchable&&f.enabled!==false)}
   ];
   const immediate=[];
   for(const template of templates){
@@ -4961,6 +5120,7 @@ export function endDay(state, force = false) {
   resolveFarmAutomation(state,summary);
   settleDailyConsumableConsumers(state,state.position,summary);
   resolveFarming(state,summary,cropDeaths);
+  resolvePastureAndHerb(state,summary);
   refreshNodes(state);
   spoilStacks(state, state.backpack.cold, true, summary, "背包保鲜格");
   spoilStacks(state, state.backpack.ordinary, false, summary, "背包");
@@ -5153,4 +5313,68 @@ export function formatInputs(inputs) {
 export function addLog(state, text) {
   state.logs.push({ day: state.day, text });
   if (state.logs.length > 100) state.logs.splice(0, state.logs.length - 100);
+}
+
+export function consolidateBackpack(state) {
+  let transferredCount = 0;
+  const areaId = state.position;
+  const backpackSlots = [state.backpack.ordinary, state.backpack.cold];
+
+  const storages = [
+    { type: "storage", stacks: state.storageByArea[areaId] ??= [], capacity: getStorageCapacity(state, areaId), allowed: () => true },
+    { type: "cold", stacks: state.coldStorageByArea[areaId] ??= [], capacity: getColdStorageCapacity(state, areaId), allowed: (item) => Boolean(item?.shelfLifeNights) },
+    { type: "seed-storage", stacks: state.seedStorageByArea[areaId] ??= [], capacity: getSeedStorageCapacity(state, areaId), allowed: (item) => item?.type === "seed" },
+    { type: "utility-storage", stacks: state.utilityStorageByArea[areaId] ??= [], capacity: getUtilityStorageCapacity(state, areaId), allowed: (item) => isUtilityStorageItem(item?.id ?? item) },
+    { type: "wardrobe", stacks: state.wardrobeByArea[areaId] ??= [], capacity: getWardrobeCapacity(state, areaId), allowed: (item) => ["weapon", "armor", "backpack"].includes(item?.type) }
+  ];
+
+  for (const stacks of backpackSlots) {
+    for (let i = stacks.length - 1; i >= 0; i--) {
+      const stack = stacks[i];
+      if (!stack || stack.quantity <= 0) {
+        stacks.splice(i, 1);
+        continue;
+      }
+      const item = ITEMS[stack.itemId];
+      for (const storage of storages) {
+        if (storage.capacity <= 0 || !storage.allowed(item)) continue;
+        const existing = storage.stacks.find(s => s.itemId === stack.itemId);
+        if (existing) {
+          mergeStackQuantities(existing, stack);
+          stacks.splice(i, 1);
+          transferredCount++;
+          break;
+        }
+      }
+    }
+  }
+
+  const mergeInternal = (stacks) => {
+    const map = new Map();
+    for (let i = 0; i < stacks.length; i++) {
+      const stack = stacks[i];
+      if (!stack || stack.quantity <= 0) {
+        stacks.splice(i, 1);
+        i--;
+        continue;
+      }
+      if (map.has(stack.itemId)) {
+        const existing = map.get(stack.itemId);
+        mergeStackQuantities(existing, stack);
+        stacks.splice(i, 1);
+        i--;
+        transferredCount++;
+      } else {
+        map.set(stack.itemId, stack);
+      }
+    }
+  };
+
+  mergeInternal(state.backpack.ordinary);
+  mergeInternal(state.backpack.cold);
+
+  if (transferredCount > 0) {
+    addLog(state, "整理了背包物资。");
+  }
+  return { ok: true, transferredCount };
 }

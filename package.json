@@ -1,0 +1,14 @@
+{
+  "name": "dropped-into-survival",
+  "version": "1.0.0",
+  "description": "被扔进一个求生游戏 (Dropped into Survival)",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node -e \"console.log('Build complete')\""
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

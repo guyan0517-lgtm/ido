@@ -287,6 +287,12 @@ export const EN_NAMES = `
 石工台|Masonry Bench
 地窖|Cellar
 大地窖|Large Cellar
+冰窖|Ice Cellar
+扩耕|Farm Expansion
+草场|Pasture
+药田|Herb Field
+新鲜药草|Fresh Herb
+特效药剂|Special Medicine
 羊圈|Sheep Pen
 牛圈|Cattle Pen
 猪圈|Pig Pen

@@ -1,0 +1,6 @@
+{
+  "name": "被扔进一个求生游戏",
+  "description": "被扔进一个求生游戏 (Dropped into Survival) - 一款策略文字生存模拟网页游戏。",
+  "permissions": [],
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
