@@ -385,6 +385,9 @@ function runAction(target) {
   if (action === "open-game-info" || action === "return-game-info") return showGameInfo();
   if (action === "open-language") return showLanguageChoice();
   if (action === "choose-language") return chooseLanguage(target.dataset.language);
+  if (action === "save-transfer") return showSaveTransfer();
+  if (action === "save-transfer-export") return saveTransferExport();
+  if (action === "save-transfer-import") return saveTransferImport();
   if (state.launch && !["resolve-launch","abort-launch"].includes(action)) return showToast("归航启动期间无法离开据点或处理其他工作");
   if (action === "continue-postgame") {
     const result=continueAfterEnding(state);
@@ -698,5 +701,66 @@ nextDayButton.addEventListener("click", () => {
   if(!state.dailyRewardClaimed&&state.dailyTasks?.length&&state.dailyTasks.every(task=>task.progress>=task.target))return showToast("今日十连抽奖励还没有领取，请先点击每日任务里的抽奖按钮");
   showModal(renderEndDayConfirmation(state),"end-day-confirm");
 });
+
+function dumpLocalStorageData() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    data[key] = localStorage.getItem(key);
+  }
+  return JSON.stringify(data);
+}
+
+function showSaveTransfer() {
+  showModal(
+    `<section class="save-transfer">
+      <h2>存档迁移</h2>
+      <p>从旧网页复制存档文本，粘贴到下方输入框，点击「导入存档」。也可点击「导出当前存档」下载本网页的存档文件。</p>
+      <textarea id="save-transfer-textarea" rows="8" style="width:100%;box-sizing:border-box;resize:vertical;" placeholder="在此粘贴存档文本…"></textarea>
+    </section>`,
+    "save-transfer",
+    `<button type="button" class="secondary-button" data-action="save-transfer-export">导出当前存档</button><button type="button" class="action-button primary" data-action="save-transfer-import">导入存档</button>`
+  );
+  const ta = modalContent.querySelector("#save-transfer-textarea");
+  if (ta) ta.value = dumpLocalStorageData();
+}
+
+function saveTransferExport() {
+  const ta = modalContent.querySelector("#save-transfer-textarea");
+  const text = (ta && ta.value) ? ta.value : dumpLocalStorageData();
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "survival-save-export.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast("存档已导出为文件");
+}
+
+function saveTransferImport() {
+  const ta = modalContent.querySelector("#save-transfer-textarea");
+  const raw = (ta ? ta.value : "").trim();
+  if (!raw) return showToast("请先粘贴存档文本");
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    return showToast("存档文本格式不正确，请检查是否完整复制");
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return showToast("存档内容无效");
+  try {
+    for (const key of Object.keys(data)) {
+      const value = data[key];
+      localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+    }
+  } catch (e) {
+    return showToast("写入失败：" + e.message);
+  }
+  showToast("导入成功，正在刷新…");
+  setTimeout(() => location.reload(), 600);
+}
 
 render();
