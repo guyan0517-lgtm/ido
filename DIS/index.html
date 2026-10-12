@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101417">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>被扔进一个求生游戏</title>
+  <!-- 服务器若忽略防缓存配置，发布新版时替换下方所有 release-20261011-211121 即可强制更新。 -->
+  <link rel="stylesheet" href="./styles.css?v=release-20261011-211121">
+  <script type="importmap">
+    {
+      "imports": {
+        "./src/active-attacks.js": "./src/active-attacks.js?v=release-20261011-211121",
+        "./src/barter-values.js": "./src/barter-values.js?v=release-20261011-211121",
+        "./src/content.js": "./src/content.js?v=release-20261011-211121",
+        "./src/data.js": "./src/data.js?v=release-20261011-211121",
+        "./src/engine.js": "./src/engine.js?v=release-20261011-211121",
+        "./src/i18n.js": "./src/i18n.js?v=release-20261011-211121",
+        "./src/i18n-en.js": "./src/i18n-en.js?v=release-20261011-211121",
+        "./src/i18n-en-names.js": "./src/i18n-en-names.js?v=release-20261011-211121",
+        "./src/i18n-en-descriptions.js": "./src/i18n-en-descriptions.js?v=release-20261011-211121",
+        "./src/i18n-en-mails.js": "./src/i18n-en-mails.js?v=release-20261011-211121",
+        "./src/i18n-en-ui.js": "./src/i18n-en-ui.js?v=release-20261011-211121",
+        "./src/item-descriptions.js": "./src/item-descriptions.js?v=release-20261011-211121",
+        "./src/npc-content.js": "./src/npc-content.js?v=release-20261011-211121",
+        "./src/page-modal.js": "./src/page-modal.js?v=release-20261011-211121",
+        "./src/storage-scope.js": "./src/storage-scope.js?v=release-20261011-211121",
+        "./src/rng.js": "./src/rng.js?v=release-20261011-211121",
+        "./src/ui.js": "./src/ui.js?v=release-20261011-211121"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand-row">
+        <div>
+          <p class="eyebrow">DROPPED INTO SURVIVAL</p>
+          <h1>
+            <button class="brand-title-button" type="button" data-action="open-game-info" aria-label="查看游戏信息">被扔进一个求生游戏</button>
+            <button class="brand-info-button" type="button" data-action="open-game-info" aria-label="查看游戏信息" title="游戏信息"><span aria-hidden="true">i</span></button>
+          </h1>
+        </div>
+        <div class="brand-actions">
+          <button id="new-game-button" class="icon-button restart-button" type="button" data-action="new-game">从头开始</button>
+          <button id="restart-day-button" class="icon-button" type="button" data-action="restart-day">重新开始本日</button>
+        </div>
+      </div>
+      <div id="status-strip" class="status-strip"></div>
+    </header>
+
+    <main id="view" class="view" aria-live="polite"></main>
+
+    <nav class="bottom-nav" aria-label="主要功能">
+      <button data-tab="explore" class="nav-button active" type="button"><span>⌖</span>探索</button>
+      <button data-tab="production" class="nav-button" type="button"><span>◇</span>生产</button>
+      <button data-tab="facilities" class="nav-button" type="button"><span>▦</span>设施</button>
+      <button data-tab="equipment" class="nav-button" type="button"><span>♢</span>物资</button>
+      <button data-tab="trade" class="nav-button" type="button"><span>⇄</span>交易</button>
+    </nav>
+    <button id="next-day-button" class="next-day" type="button">进入下一天</button>
+  </div>
+
+  <div id="modal-layer" class="modal-layer" hidden>
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+      <div id="modal-content"></div>
+      <div class="modal-actions">
+        <button class="secondary-button" type="button" data-action="close-modal">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" popover="manual"></div>
+  <script type="module" src="./src/main.js?v=release-20261011-211121"></script>
+</body>
+</html>
