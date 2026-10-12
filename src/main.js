@@ -290,6 +290,7 @@ function render(serializedProgress=null) {
     statusStrip.style.display = "none";
     statusStrip.innerHTML = "";
   }
+  const inventoryScrollPositions = captureInventoryScrollPositions(view);
   const visibleNaturalNodeCount=visibleResourceNodeCountsByArea.get(state.position)??RESOURCE_NODE_PAGE_SIZE;
   view.innerHTML = renderView(tab, state,{visibleNaturalNodeCount});
   restoreProductionStationCollapseState();
@@ -394,6 +395,7 @@ function runAction(target) {
   if(action==="close-modal"){
     if(modal.dataset.kind==="language-required")return;
     if(pendingConfirmation)return resolveConfirmation(false);
+    if(modal.dataset.kind==="move-confirm") return showModal(renderMap(state),"map");
     if(modal.open)modal.close();
     return;
   }

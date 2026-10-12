@@ -559,15 +559,21 @@ export function renderSettings(currentTheme="default"){
       `<div class="theme-choices" role="radiogroup" aria-label="页面配色">${themeChoices}</div>`+
     `</div>`+
     `<div class="setting-item">`+
+      `<div class="row-title">存档</div>`+
+      `<div class="setting-reset-action">`+
+        `<button class="icon-button compact-button" type="button" data-action="save-transfer">迁移</button>`+
+      `</div>`+
+    `</div>`+
+    `<div class="setting-item">`+
       `<div class="row-title">保存</div>`+
       `<div class="setting-reset-action">`+
-        `<button class="icon-button" type="button" data-action="install-pwa">保存到桌面</button>`+
+        `<button class="icon-button compact-button" type="button" data-action="install-pwa">安装</button>`+
       `</div>`+
     `</div>`+
     `<div class="setting-item setting-reset-section">`+
       `<div class="row-title">重置</div>`+
       `<div class="setting-reset-action">`+
-        `<button id="new-game-button" class="icon-button restart-button" type="button" data-action="new-game">从头开始</button>`+
+        `<button id="new-game-button" class="icon-button restart-button compact-button" type="button" data-action="new-game">重开</button>`+
       `</div>`+
     `</div>`+
   `</section>`;
