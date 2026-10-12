@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title">
+  <title id="title">五级永久避难所</title>
+  <defs><filter id="s" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="1.5" dy="3" stdDeviation="2.3" flood-color="#241a10" flood-opacity=".48"/></filter></defs>
+  <g filter="url(#s)" stroke="#30251a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 99h110" fill="none" opacity=".75"/>
+    <path d="m12 93 8-50 15-14h51l15 14 8 50Z" fill="#77776d"/>
+    <path d="m20 43 15-14h51l15 14Z" fill="#9b927c"/>
+    <path d="M12 93h97v7H12Z" fill="#514b40"/>
+    <path d="M29 48h63M25 59h71M22 71h77M19 83h83" fill="none" stroke="#5c5a51" stroke-width="1.6"/>
+    <path d="M45 94V61h30v33Z" fill="#393a38"/>
+    <path d="M49 65h22v29H49Z" fill="#625c4f" stroke-width="1.8"/>
+    <circle cx="67" cy="79" r="2" fill="#d1b66f" stroke="none"/>
+    <path d="M27 51h11v11H27Zm55 0h11v11H82Z" fill="#cbbd98"/>
+    <path d="m60 29 8-16m-8 16-8-16m8 4V5" fill="none"/>
+    <path d="M51 13h18M55 9h10" fill="none" stroke-width="1.8"/>
+    <path d="m16 93-8 6m96-6 8 6" fill="none"/>
+  </g>
+</svg>

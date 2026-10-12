@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title">
+  <title id="title">一级茅草帐篷</title>
+  <defs><filter id="s" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="1.5" dy="3" stdDeviation="2" flood-color="#241a10" flood-opacity=".38"/></filter></defs>
+  <g filter="url(#s)" stroke="#30251a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 92h94" fill="none" opacity=".72"/>
+    <path d="M22 89 57 28l41 61Z" fill="#c9aa6c"/>
+    <path d="m57 28 2 61H22Z" fill="#b99659"/>
+    <path d="M57 28 98 89M49 42l-21 38m29-33 31 34M42 54 31 74m33-15 19 23M36 66l-8 15m44-9 9 11" fill="none" stroke="#6d5231" stroke-width="2"/>
+    <path d="M48 89 59 67l13 22Z" fill="#3b2b1d"/>
+    <path d="M59 67v22" fill="none" stroke="#d5ba82" stroke-width="1.8"/>
+    <path d="m17 92 7-5m77 5 7-5" fill="none"/>
+  </g>
+</svg>

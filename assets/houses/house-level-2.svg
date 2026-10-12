@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title">
+  <title id="title">二级木屋</title>
+  <defs><filter id="s" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="1.5" dy="3" stdDeviation="2" flood-color="#241a10" flood-opacity=".4"/></filter></defs>
+  <g filter="url(#s)" stroke="#30251a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 94h100" fill="none" opacity=".72"/>
+    <path d="M23 54h74v39H23Z" fill="#b7834d"/>
+    <path d="m14 57 43-35 50 35-7 7-43-29-37 29Z" fill="#755032"/>
+    <path d="M27 62h66M27 70h66M27 78h66M27 86h66" fill="none" stroke="#68452c" stroke-width="2"/>
+    <path d="M48 92V66h18v26" fill="#4a3322"/>
+    <path d="M74 65h13v13H74Z" fill="#d8c397"/>
+    <path d="M80.5 65v13M74 71.5h13" fill="none" stroke-width="1.6"/>
+    <path d="M83 29v-12h10v21" fill="#66503a"/>
+    <path d="m21 64-7-7m86 7 7-7" fill="none"/>
+  </g>
+</svg>
