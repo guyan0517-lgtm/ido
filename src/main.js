@@ -120,8 +120,35 @@ function loadGame() {
   }
 }
 
+function checkUrlHashTransfer() {
+  try {
+    const hash = window.location.hash;
+    const prefix = "#transfer=";
+    if (hash && hash.startsWith(prefix)) {
+      const raw = decodeURIComponent(hash.slice(prefix.length));
+      const data = JSON.parse(raw);
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        let count = 0;
+        for (const [key, value] of Object.entries(data)) {
+          if (typeof value === "string") {
+            localStorage.setItem(key, value);
+            count++;
+          }
+        }
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        return count > 0;
+      }
+    }
+  } catch (e) {
+    console.error("Transfer hash parse error:", e);
+  }
+  return false;
+}
+
+const importedFromHash = checkUrlHashTransfer();
 let state = loadGame();
 if (!hasLanguagePreference()) showLanguageChoice(true);
+if (importedFromHash) showToast("旧网页存档已成功导入");
 
 function saveCurrentProgress(serialized=serializeState(state)){
   localStorage.setItem(SAVE_KEY, serialized);
@@ -477,6 +504,8 @@ function runAction(target) {
   if (action === "open-language") return showLanguageChoice();
   if (action === "choose-language") return chooseLanguage(target.dataset.language);
   if (action === "save-transfer") return showSaveTransfer();
+  if (action === "save-transfer-copy-script") return saveTransferCopyScript();
+  if (action === "save-transfer-copy-console") return saveTransferCopyConsole();
   if (action === "save-transfer-export") return saveTransferExport();
   if (action === "save-transfer-import") return saveTransferImport();
   if (state.launch && !["resolve-launch","abort-launch"].includes(action)) return showToast("归航启动期间无法离开据点或处理其他工作");
@@ -808,15 +837,78 @@ function dumpLocalStorageData() {
   return JSON.stringify(data);
 }
 
+function getExtractScript() {
+  const targetUrl = window.location.origin + window.location.pathname;
+  return `javascript:void(function(){try{var d={};for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k)d[k]=localStorage.getItem(k);}var s=JSON.stringify(d);try{navigator.clipboard.writeText(s);}catch(e){}location.href='${targetUrl}#transfer='+encodeURIComponent(s);}catch(err){alert('提取失败：'+err.message);}})();`;
+}
+
+function getConsoleScript() {
+  const targetUrl = window.location.origin + window.location.pathname;
+  return `var d={};for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k)d[k]=localStorage.getItem(k);};var s=JSON.stringify(d);try{navigator.clipboard.writeText(s);console.log('已复制');}catch(e){}location.href='${targetUrl}#transfer='+encodeURIComponent(s);`;
+}
+
+function copyFallback(text, msg) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand("copy");
+    showToast(msg);
+  } catch (e) {
+    showToast("复制失败");
+  }
+  document.body.removeChild(ta);
+}
+
+function saveTransferCopyScript() {
+  const script = getExtractScript();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(script).then(() => {
+      showToast("提取脚本已复制，请前往原版网页运行");
+    }).catch(() => {
+      copyFallback(script, "提取脚本已复制，请前往原版网页运行");
+    });
+  } else {
+    copyFallback(script, "提取脚本已复制，请前往原版网页运行");
+  }
+}
+
+function saveTransferCopyConsole() {
+  const script = getConsoleScript();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(script).then(() => {
+      showToast("控制台代码已复制，请在原版网页运行");
+    }).catch(() => {
+      copyFallback(script, "控制台代码已复制，请在原版网页运行");
+    });
+  } else {
+    copyFallback(script, "控制台代码已复制，请在原版网页运行");
+  }
+}
+
 function showSaveTransfer() {
   showModal(
     `<section class="save-transfer">
-      <h2>存档迁移</h2>
-      <p>从旧网页复制存档文本，粘贴到下方输入框，点击「导入存档」。也可点击「导出当前存档」下载本网页的存档文件。</p>
-      <textarea id="save-transfer-textarea" rows="8" style="width:100%;box-sizing:border-box;resize:vertical;" placeholder="在此粘贴存档文本…"></textarea>
+      <h2>迁移</h2>
+      <div class="setting-item" style="padding:8px 0;border-bottom:1px solid var(--line);">
+        <div class="row-title">提取</div>
+        <p class="row-detail" style="margin:4px 0 8px;">在原版网页提取本地存档：点击提取复制脚本，去原版网页地址栏粘贴执行或者存为书签点击，即可自动将进度带回新网页；也可点击代码复制控制台代码。</p>
+        <div class="row-actions">
+          <button type="button" class="action-button primary compact-button" data-action="save-transfer-copy-script">提取</button>
+          <button type="button" class="secondary-button compact-button" data-action="save-transfer-copy-console">代码</button>
+        </div>
+      </div>
+      <div class="setting-item" style="padding:8px 0;">
+        <div class="row-title">导入</div>
+        <p class="row-detail" style="margin:4px 0 8px;">手动粘贴旧网页存档文本：</p>
+        <textarea id="save-transfer-textarea" rows="4" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);color:var(--text);padding:8px;" placeholder="在此粘贴存档文本"></textarea>
+      </div>
     </section>`,
     "save-transfer",
-    `<button type="button" class="secondary-button" data-action="save-transfer-export">导出当前存档</button><button type="button" class="action-button primary" data-action="save-transfer-import">导入存档</button>`
+    `<button type="button" class="secondary-button" data-action="save-transfer-export">导出</button><button type="button" class="action-button primary" data-action="save-transfer-import">导入</button>`
   );
   const ta = modalContent.querySelector("#save-transfer-textarea");
   if (ta) ta.value = dumpLocalStorageData();
@@ -834,7 +926,7 @@ function saveTransferExport() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast("存档已导出为文件");
+  showToast("存档已导出");
 }
 
 function saveTransferImport() {
@@ -845,7 +937,7 @@ function saveTransferImport() {
   try {
     data = JSON.parse(raw);
   } catch (e) {
-    return showToast("存档文本格式不正确，请检查是否完整复制");
+    return showToast("存档文本格式不正确");
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return showToast("存档内容无效");
   try {
@@ -854,9 +946,9 @@ function saveTransferImport() {
       localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
     }
   } catch (e) {
-    return showToast("写入失败：" + e.message);
+    return showToast("写入失败");
   }
-  showToast("导入成功，正在刷新…");
+  showToast("导入成功");
   setTimeout(() => location.reload(), 600);
 }
 
