@@ -296,6 +296,8 @@ export const EN_NAMES = `
 羊圈|Sheep Pen
 牛圈|Cattle Pen
 猪圈|Pig Pen
+渔场|Fishery
+蟹场|Crab Pen
 自动喂食机|Automatic Feeder
 蜂箱|Beehive Box
 厕所|Toilet

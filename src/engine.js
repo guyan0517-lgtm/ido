@@ -154,7 +154,7 @@ const DAILY_LOTTERY_WATER_ASSIST_CHANCE=.5;
 export const D4_LOW_FOOD_APPLE_CHANCE=.5;
 export const FEED_ANIMALS_STAMINA_COST=LIVESTOCK_FEED_STAMINA_COST;
 export const LIVESTOCK_STARVATION_DAYS=10;
-const ANIMAL_PEN_IDS=Object.freeze({chicken:"chicken_coop",sheep:"sheep_pen",cattle:"cattle_pen",pig:"pig_pen",fish:"fishery",crab:"fishery"});
+const ANIMAL_PEN_IDS=Object.freeze({chicken:"chicken_coop",sheep:"sheep_pen",cattle:"cattle_pen",pig:"pig_pen",fish:"fishery",crab:"crab_pen"});
 const AUTOMATIC_FEED_ORDER=Object.freeze(["pig","cattle","sheep","chicken","fish","crab"]);
 // 好感折扣调整只作用于新报价，保留定价版本以免刷新玩家已有交易。
 const TRADE_PRICING_RULE_VERSION=90;
@@ -2806,7 +2806,10 @@ function buildingPrerequisiteError(state,areaId,definition){
 
 function completedPlantingBeds(state,areaId,includeDamaged=false){
   return Object.entries(state.buildingsByArea[areaId]??{})
-    .filter(([id,progress])=>(id==="planting_bed"||id.startsWith("planting_bed__"))&&progress.completed&&(includeDamaged||!progress.damaged))
+    .filter(([id,progress])=>{
+      const baseId=id.replace(/__\d+$/u,"");
+      return (baseId==="planting_bed"||baseId==="grass_field"||baseId==="corn_field")&&progress.completed&&(includeDamaged||!progress.damaged);
+    })
     .sort(([,left],[,right])=>(left.completedOrder??0)-(right.completedOrder??0));
 }
 
@@ -2815,7 +2818,8 @@ function ensurePlotBedAssignments(state,areaId){
   for(const plot of plots){
     if(plot.bedId&&validIds.has(plot.bedId)&&!used.has(plot.bedId))used.add(plot.bedId);
     else{
-      const available=beds.find(([id])=>!used.has(id));
+      const preferredBase = plot.cropId === "grass" ? "grass_field" : plot.cropId === "corn" ? "corn_field" : "planting_bed";
+      const available=beds.find(([id])=>!used.has(id)&&id.replace(/__\d+$/u,"")===preferredBase) || beds.find(([id])=>!used.has(id));
       if(available){plot.bedId=available[0];used.add(available[0]);}
     }
     const bed=beds.find(([id])=>id===plot.bedId)?.[1];
@@ -3002,7 +3006,10 @@ export function getCultivatedHarvestMethod(state){
 export function plantCrop(state,cropId,bedId=null) {
   const crop=CROPS[cropId]; if(!crop) return {ok:false,message:"未知作物"};
   const usedBeds=ensurePlotBedAssignments(state,state.position),beds=completedPlantingBeds(state,state.position);
-  const emptyBed=bedId?beds.find(([id])=>id===bedId&&!usedBeds.has(id)):beds.find(([id])=>!usedBeds.has(id));
+  const preferredBase = cropId === "grass" ? "grass_field" : cropId === "corn" ? "corn_field" : "planting_bed";
+  const emptyBed=bedId
+    ? beds.find(([id])=>id===bedId&&!usedBeds.has(id))
+    : (beds.find(([id])=>!usedBeds.has(id)&&id.replace(/__\d+$/u,"")===preferredBase) || beds.find(([id])=>!usedBeds.has(id)));
   if(!emptyBed) return {ok:false,message:"当地没有空种植位"};
   if(!consumeItem(state,crop.seedId,1)) return {ok:false,message:"缺少种子"};
   const stamina=1;
@@ -3039,6 +3046,11 @@ export function harvestPlot(state,plotId) {
   settleCurrentAreaResourcesForAction(state);
   state.player.stamina=roundStamina(state.player.stamina-.5);plot.charges-=quantity;
   addItem(state,plot.cropId,quantity);
+  if(plot.cropId==="grass"){
+    addItem(state,"feed",quantity);
+  }else if(plot.cropId==="corn"){
+    addItem(state,"fish_feed",quantity);
+  }
   let seeds=0;
   const seedRolls=crop.cultivatedSeedPerHarvest?1:quantity;
   for(let unit=0;unit<seedRolls;unit++)if(randomFromKey(getGameplaySeed(state),`cultivated-seed:${plot.id}:${plot.cycle}:${plot.harvestedThisCycle+unit}`)<CULTIVATED_SEED_DROP_CHANCE)seeds+=1;
@@ -3047,8 +3059,10 @@ export function harvestPlot(state,plotId) {
   if(plot.charges<=0){plot.phase="regrowing";plot.mature=false;plot.remaining=crop.growthDays;plot.fertility=0;plot.watered=false;plot.fertilized=false;plot.cycle+=1;plot.harvestedThisCycle=0;}
   progressGatherTasksForOutput(state,plot.cropId,quantity);
   progressTasks(state,"harvest",1);
-  const gains=[{itemId:plot.cropId,quantity},...(seeds?[{itemId:crop.seedId,quantity:seeds}]:[])];
-  addLog(state,`从家养${crop.name}取得${ITEMS[plot.cropId].name}×${quantity}${seeds?`、${ITEMS[crop.seedId].name}×${seeds}`:""}。`);
+  const extraGain=plot.cropId==="grass"?[{itemId:"feed",quantity}]:plot.cropId==="corn"?[{itemId:"fish_feed",quantity}]:[];
+  const gains=[{itemId:plot.cropId,quantity},...extraGain,...(seeds?[{itemId:crop.seedId,quantity:seeds}]:[])];
+  const feedGainText=plot.cropId==="grass"?`、${ITEMS.feed.name}×${quantity}`:plot.cropId==="corn"?`、${ITEMS.fish_feed.name}×${quantity}`:"";
+  addLog(state,`从家养${crop.name}取得${ITEMS[plot.cropId].name}×${quantity}${feedGainText}${seeds?`、${ITEMS[crop.seedId].name}×${seeds}`:""}。`);
   return {ok:true,quantity,message:receivedItemsMessage(gains),weatherExposure:resolveWeatherSicknessExposure(state,state.position,{ignoreHouse:true})};
 }
 
@@ -3114,9 +3128,73 @@ export function upgradeHerbFieldToGreenhouse(state, areaId = state.position) {
 
 export function getPastureStatus(state, areaId = state.position) {
   state.pastureByArea ??= {};
-  const pasture = state.pastureByArea[areaId] ??= { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] };
-  while ((pasture.plots?.length ?? 0) < 5) (pasture.plots ??= []).push({ growth: 0 });
+  const pasture = state.pastureByArea[areaId] ??= {};
+  pasture.grassPlot ??= { planted: false, remaining: 3, watered: false, fertilized: false, fertility: 0, mature: false };
+  pasture.cornPlot ??= { planted: false, remaining: 4, watered: false, fertilized: false, fertility: 0, mature: false };
   return pasture;
+}
+
+export function plantPasturePlot(state, cropType, areaId = state.position) {
+  if (!completedInstances(state, areaId, "pasture").length) return { ok: false, message: "当地没有建好的草场" };
+  const pasture = getPastureStatus(state, areaId);
+  const isGrass = cropType === "grass";
+  const plot = isGrass ? pasture.grassPlot : pasture.cornPlot;
+  const seedId = isGrass ? "grass_seed" : "corn_seed";
+  const seedName = isGrass ? "草种" : "玉米种子";
+  const plotName = isGrass ? "草场地块" : "玉米地块";
+  if (plot.planted) return { ok: false, message: `${plotName}已经播种` };
+  if (countItem(state, seedId) < 1) return { ok: false, message: `缺少${seedName}` };
+  if (state.player.stamina < 0.5) return { ok: false, message: "体力不足，需要0.5" };
+  settleCurrentAreaResourcesForAction(state);
+  consumeItem(state, seedId, 1);
+  state.player.stamina = roundStamina(state.player.stamina - 0.5);
+  plot.planted = true;
+  plot.remaining = isGrass ? 3 : 4;
+  plot.watered = false;
+  plot.fertilized = false;
+  plot.fertility = 0;
+  plot.mature = false;
+  addLog(state, `在草场${plotName}种下了${seedName}。`);
+  return { ok: true, message: `${plotName}已播种`, weatherExposure: resolveWeatherSicknessExposure(state, state.position) };
+}
+
+export function waterPasturePlot(state, cropType, areaId = state.position) {
+  if (!completedInstances(state, areaId, "pasture").length) return { ok: false, message: "当地没有建好的草场" };
+  const pasture = getPastureStatus(state, areaId);
+  const isGrass = cropType === "grass";
+  const plot = isGrass ? pasture.grassPlot : pasture.cornPlot;
+  const plotName = isGrass ? "草场地块" : "玉米地块";
+  if (!plot.planted) return { ok: false, message: `${plotName}尚未播种` };
+  if (plot.mature) return { ok: false, message: `${plotName}已成熟，等待夜间自动收获` };
+  if (plot.watered) return { ok: false, message: "今天已经浇过水" };
+  const cost = (!pasture.greenhouse && getPlotEnvironmentEffects(state, { id: "pasture" }, areaId).heatAffected) ? 2 : 1;
+  if (countItem(state, "water") < cost || state.player.stamina < 0.2) return { ok: false, message: "缺少水或体力不足" };
+  settleCurrentAreaResourcesForAction(state);
+  consumeItem(state, "water", cost);
+  state.player.stamina = roundStamina(state.player.stamina - 0.2);
+  plot.watered = true;
+  progressTasks(state, "water", 1);
+  addLog(state, `为草场${plotName}进行了浇水。`);
+  return { ok: true, message: `已给${plotName}浇水`, weatherExposure: resolveWeatherSicknessExposure(state, state.position) };
+}
+
+export function fertilizePasturePlot(state, cropType, areaId = state.position) {
+  if (!completedInstances(state, areaId, "pasture").length) return { ok: false, message: "当地没有建好的草场" };
+  const pasture = getPastureStatus(state, areaId);
+  const isGrass = cropType === "grass";
+  const plot = isGrass ? pasture.grassPlot : pasture.cornPlot;
+  const plotName = isGrass ? "草场地块" : "玉米地块";
+  if (!plot.planted) return { ok: false, message: `${plotName}尚未播种` };
+  if (plot.mature) return { ok: false, message: `${plotName}已成熟，等待夜间自动收获` };
+  if (plot.fertilized) return { ok: false, message: "今天不能再施肥" };
+  if (plot.fertility >= 5) return { ok: false, message: "丰饶已满，无需施肥" };
+  if (countItem(state, "fertilizer") < 1 || state.player.stamina < 0.2) return { ok: false, message: "缺少肥料或体力不足" };
+  settleCurrentAreaResourcesForAction(state);
+  consumeItem(state, "fertilizer", 1);
+  state.player.stamina = roundStamina(state.player.stamina - 0.2);
+  plot.fertilized = true;
+  addLog(state, `为草场${plotName}进行了施肥。`);
+  return { ok: true, message: `已给${plotName}施肥`, weatherExposure: resolveWeatherSicknessExposure(state, state.position) };
 }
 
 export function getHerbFieldStatus(state, areaId = state.position) {
@@ -3205,26 +3283,65 @@ export function harvestHerbField(state, areaId = state.position) {
 function resolvePastureAndHerb(state, summary) {
   for (const areaId of Object.keys(AREAS)) {
     if (completedInstances(state, areaId, "pasture").length > 0) {
-      state.pastureByArea ??= {};
-      const pasture = state.pastureByArea[areaId] ??= { plots: [ { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 }, { growth: 0 } ] };
-      while ((pasture.plots?.length ?? 0) < 5) (pasture.plots ??= []).push({ growth: 0 });
-      let feedGained = 0;
-      for (const plot of pasture.plots) {
-        plot.growth = (plot.growth || 0) + 1;
-        if (plot.growth >= 3) {
-          plot.growth = 0;
-          feedGained += 2;
+      const pasture = getPastureStatus(state, areaId);
+      // 草场地块：长满到期夜间自动收获并制作成饲料入库
+      if (pasture.grassPlot?.planted) {
+        const p = pasture.grassPlot;
+        if (!p.mature) {
+          if (!p.watered && consumeLocalStorageItem(state, "water", 1, areaId)) {
+            p.watered = true;
+          }
+          if (p.watered) {
+            p.remaining -= 1;
+            if (p.fertilized) p.fertility = Math.min(5, (p.fertility || 0) + 1);
+            if (p.remaining <= 0) p.mature = true;
+          }
+          p.watered = false;
+          p.fertilized = false;
+        }
+        if (p.mature) {
+          const feedCount = 4 + Math.floor(Number(p.fertility || 0) * 1.5);
+          addItem(state, "feed", feedCount, { areaId, preferred: "storage" });
+          addItem(state, "grass_seed", 1, { areaId });
+          summary.push(`${areaId}：草场成熟，已自动收割并制作入库饲料${feedCount}份与草种1份`);
+          addLog(state, `${areaId}：草场草料成熟，已自动收割并制作入库饲料${feedCount}份。`);
+          p.planted = false;
+          p.mature = false;
+          p.remaining = 3;
+          p.fertility = 0;
+          p.watered = false;
+          p.fertilized = false;
         }
       }
-      if (feedGained > 0) {
-        addItem(state, "feed", feedGained, { areaId });
-        summary.push(`${areaId}：草场自动收割草料并转化为饲料${feedGained}份存入当地储存库`);
-        addLog(state, `${areaId}：草场自动收割成熟草料，制作并入库饲料${feedGained}份。`);
+      // 玉米地块：长满到期夜间自动收获并制作成玉米饲料入库
+      if (pasture.cornPlot?.planted) {
+        const p = pasture.cornPlot;
+        if (!p.mature) {
+          if (!p.watered && consumeLocalStorageItem(state, "water", 1, areaId)) {
+            p.watered = true;
+          }
+          if (p.watered) {
+            p.remaining -= 1;
+            if (p.fertilized) p.fertility = Math.min(5, (p.fertility || 0) + 1);
+            if (p.remaining <= 0) p.mature = true;
+          }
+          p.watered = false;
+          p.fertilized = false;
+        }
+        if (p.mature) {
+          const feedCount = 3 + Math.floor(Number(p.fertility || 0) * 1.5);
+          addItem(state, "fish_feed", feedCount, { areaId, preferred: "storage" });
+          addItem(state, "corn_seed", 1, { areaId });
+          summary.push(`${areaId}：玉米地成熟，已自动收获并制作成玉米饲料${feedCount}份与玉米种子1份`);
+          addLog(state, `${areaId}：玉米地成熟，已自动收割制作入库玉米饲料${feedCount}份。`);
+          p.planted = false;
+          p.mature = false;
+          p.remaining = 4;
+          p.fertility = 0;
+          p.watered = false;
+          p.fertilized = false;
+        }
       }
-      addItem(state, "corn", 2, { areaId });
-      addItem(state, "fish_feed", 2, { areaId });
-      summary.push(`${areaId}：草场扩建玉米地自动收获玉米并合成鱼饲料2份`);
-      addLog(state, `${areaId}：草场玉米地自动收获并合成鱼饲料2份存入仓库。`);
     }
     const aqueducts = completedInstances(state, areaId, "aqueduct");
     const upgradedAqueducts = completedInstances(state, areaId, "aqueduct_upgraded");
@@ -3285,37 +3402,53 @@ function applyFarmAutomation(state,areaId,plots,summary){
 
 function completedAnimalPens(state,areaId,type){
   const penId=ANIMAL_PEN_IDS[type];
+  const penIds=[penId];
   return Object.entries(state.buildingsByArea[areaId]??{})
-    .filter(([id,progress])=>(id===penId||id.startsWith(`${penId}__`))&&progress.completed)
+    .filter(([id,progress])=>penIds.some(p=>id===p||id.startsWith(`${p}__`))&&progress.completed)
     .sort(([,left],[,right])=>(left.completedOrder??0)-(right.completedOrder??0));
 }
 
 function ensureAnimalPenAssignments(state,areaId,type){
   const animals=(state.animalsByArea[areaId]??[]).filter(animal=>animal.type===type),pens=completedAnimalPens(state,areaId,type);
   if(!pens.length)return;
-  const capacity=BUILDINGS[ANIMAL_PEN_IDS[type]]?.effect?.capacity??1,validIds=new Set(pens.map(([id])=>id)),counts=new Map(pens.map(([id])=>[id,0]));
+  const validIds=new Set(pens.map(([id])=>id)),counts=new Map(pens.map(([id])=>[id,0]));
   for(const animal of animals){
     if(!validIds.has(animal.penId)){delete animal.penId;continue;}
     counts.set(animal.penId,(counts.get(animal.penId)??0)+1);
   }
   for(const animal of animals){
     if(animal.penId)continue;
-    const target=pens.find(([id])=>(counts.get(id)??0)<capacity)??pens.at(-1);
+    const target=pens.find(([id])=>{
+      const baseId=id.replace(/__\d+$/u,"");
+      const cap=BUILDINGS[baseId]?.effect?.capacity??1;
+      return (counts.get(id)??0)<cap;
+    })??pens.at(-1);
     animal.penId=target[0];counts.set(target[0],(counts.get(target[0])??0)+1);
   }
 }
 
 export function getAnimalPenSlots(state,type,areaId=state.position){
   ensureAnimalPenAssignments(state,areaId,type);
-  return completedAnimalPens(state,areaId,type).map(([penId,progress],index)=>({
-    penId,progress,index,capacity:BUILDINGS[ANIMAL_PEN_IDS[type]]?.effect?.capacity??1,
-    animals:(state.animalsByArea[areaId]??[]).filter(animal=>animal.type===type&&animal.penId===penId)
-  }));
+  return completedAnimalPens(state,areaId,type).map(([penId,progress],index)=>{
+    const baseId=penId.replace(/__\d+$/u,"");
+    return {
+      penId,progress,index,capacity:BUILDINGS[baseId]?.effect?.capacity??1,
+      animals:(state.animalsByArea[areaId]??[]).filter(animal=>animal.type===type&&animal.penId===penId)
+    };
+  });
 }
 
 function canFeedAnimalPen(slot){return !slot.progress.damaged&&slot.animals.some(animal=>!animal.fed);}
 
-function animalPenCapacity(state,areaId,type){const id=ANIMAL_PEN_IDS[type];return completedInstances(state,areaId,id).length*(BUILDINGS[id]?.effect?.capacity??0);}
+function animalPenCapacity(state,areaId,type){
+  const pens=completedAnimalPens(state,areaId,type);
+  let cap=0;
+  for(const [id] of pens){
+    const baseId=id.replace(/__\d+$/u,"");
+    cap+=BUILDINGS[baseId]?.effect?.capacity??0;
+  }
+  return cap;
+}
 export function addAnimalToPen(state,type,penId=null){
   const def=LIVESTOCK[type];if(!def)return {ok:false,message:"未知动物"};
   const current=state.animalsByArea[state.position].filter(a=>a.type===type).length;
@@ -3334,8 +3467,11 @@ export function feedAnimals(state,type,penId=null){
   if(slot?.progress.damaged)return {ok:false,message:"栏舍已损坏，修复后才能喂养"};
   const animals=(slot?.animals??[]).filter(animal=>!animal.fed);
   if(!animals.length)return {ok:false,message:"没有需要喂养的动物"};
-  if(!hasInputs(state,def.feed)||state.player.stamina<FEED_ANIMALS_STAMINA_COST)return {ok:false,message:"饲料或体力不足"};
-  settleCurrentAreaResourcesForAction(state);consumeInputs(state,def.feed);state.player.stamina=roundStamina(state.player.stamina-FEED_ANIMALS_STAMINA_COST);
+  const hasFishFeed=hasInputs(state,def.feed);
+  if(!hasFishFeed||state.player.stamina<FEED_ANIMALS_STAMINA_COST)return {ok:false,message:"饲料或体力不足"};
+  settleCurrentAreaResourcesForAction(state);
+  consumeInputs(state,def.feed);
+  state.player.stamina=roundStamina(state.player.stamina-FEED_ANIMALS_STAMINA_COST);
   for(const animal of animals)animal.fed=true;
   progressTasks(state,"feed",1);return {ok:true,weatherExposure:resolveWeatherSicknessExposure(state,state.position)};
 }
@@ -3733,7 +3869,7 @@ export function getBuildOptions(state) {
     if(id==="aqueduct_upgraded"&&!Object.entries(state.buildingsByArea[areaId]??{}).some(([bId,progress])=>bId.replace(/__\d+$/u,"")==="aqueduct"&&progress.completed))continue;
     const existing = Object.entries(state.buildingsByArea[areaId]).filter(([key]) => key === id || key.startsWith(`${id}__`));
     let max = definition.maxPerArea ?? 1;
-    if (id === "planting_bed" && completedInstances(state, areaId, "farm_expansion").length > 0) {
+    if ((id === "planting_bed" || id === "grass_field" || id === "corn_field") && completedInstances(state, areaId, "farm_expansion").length > 0) {
       max = 30;
     }
     const unfinished = existing.find(([,value]) => !value.completed);
@@ -3787,6 +3923,11 @@ export function buildStep(state, buildingId, acceptRisk = false) {
     if(Number(definition.effect?.fuelDaily??0)>0||Number(definition.effect?.power??0)>0||dailyItemResourceRequirements(definition.effect).length>0){progress.enabled=false;progress.fuelPaidDay=0;}
     if (definition.houseLevel) state.housesByArea[areaId] = { level: definition.houseLevel };
     for(const blueprintId of definition.completionBlueprints??[])acquireBlueprint(state,blueprintId,`${definition.name}建成`);
+    if(definition.completionItems){
+      for(const [itemId, quantity] of Object.entries(definition.completionItems)){
+        addItem(state, itemId, quantity, { areaId });
+      }
+    }
     if(baseId==="stone_house")acquireBlueprint(state,"boatwright_bench","石屋建成");
     if(baseId==="boatwright_bench")acquireBlueprint(state,"kayak","船工台建成");
     addLog(state, `在${areaId} ${AREAS[areaId].name}建好了${definition.name}。`);
@@ -4998,6 +5139,7 @@ function resolveFarming(state,summary,cropDeaths){
       const plot=plots[index];
       const crop=CROPS[plot.cropId],environment=getPlotEnvironmentEffects(state,plot,areaId);
       const ready=plot.phase==="ready";
+      const isAutoFeedCrop=plot.cropId==="grass"||plot.cropId==="corn";
       if(!ready&&plot.watered&&plot.fertilized)plot.fertility=Math.min(5,Number(plot.fertility??0)+1);
       if(environment.rainAffected&&randomFromKey(getGameplaySeed(state),`acid-rain-plot:${state.day}:${areaId}:${plot.id}`)<environment.rainDamageChance){
         if(Number(plot.fertility??0)<=0){
@@ -5011,11 +5153,52 @@ function resolveFarming(state,summary,cropDeaths){
         plot.fertility=Math.max(0,Number(plot.fertility??0)-environment.rainFertilityLoss);
         summary.push(`${areaId}：家养${crop.name}受酸雨影响，丰饶降低${environment.rainFertilityLoss}点`);
       }
-      if(ready){plot.watered=false;plot.fertilized=false;continue;}
+      if(ready){
+        if(isAutoFeedCrop){
+          const yieldQty=plot.charges||cultivatedStock(state,areaId,crop,plot.fertility);
+          const feedItemId=plot.cropId==="grass"?"feed":"fish_feed";
+          addItem(state,feedItemId,yieldQty,{areaId,preferred:"storage"});
+          let seeds=0;
+          const seedRolls=crop.cultivatedSeedPerHarvest?1:yieldQty;
+          for(let unit=0;unit<seedRolls;unit++)if(randomFromKey(getGameplaySeed(state),`cultivated-seed:${plot.id}:${plot.cycle}:${unit}`)<CULTIVATED_SEED_DROP_CHANCE)seeds+=1;
+          if(seeds)addItem(state,crop.seedId,seeds,{areaId,preferred:"storage"});
+          plot.phase="regrowing";
+          plot.mature=false;
+          plot.remaining=crop.growthDays;
+          plot.charges=0;
+          plot.maxCharges=yieldQty;
+          plot.fertility=0;
+          plot.cycle=(plot.cycle||0)+1;
+          plot.harvestedThisCycle=0;
+          summary.push(`${areaId}：${crop.name}自动收割，产出${ITEMS[feedItemId].name}×${yieldQty}已入库`);
+          addLog(state,`${areaId}：${crop.name}成熟并自动收割，制成${ITEMS[feedItemId].name}×${yieldQty}${seeds?`、${ITEMS[crop.seedId].name}×${seeds}`:""}已入库。`);
+        }
+        plot.watered=false;plot.fertilized=false;continue;
+      }
       if(plot.watered)plot.remaining-=1;
       if(plot.remaining<=0){
-        plot.phase="ready";plot.mature=true;plot.maxCharges=cultivatedStock(state,areaId,crop,plot.fertility);plot.charges=plot.maxCharges;
-        summary.push(`${areaId}：家养${crop.name}已经长满（${plot.charges}/${plot.maxCharges}）`);
+        const yieldQty=cultivatedStock(state,areaId,crop,plot.fertility);
+        if(isAutoFeedCrop){
+          const feedItemId=plot.cropId==="grass"?"feed":"fish_feed";
+          addItem(state,feedItemId,yieldQty,{areaId,preferred:"storage"});
+          let seeds=0;
+          const seedRolls=crop.cultivatedSeedPerHarvest?1:yieldQty;
+          for(let unit=0;unit<seedRolls;unit++)if(randomFromKey(getGameplaySeed(state),`cultivated-seed:${plot.id}:${plot.cycle}:${unit}`)<CULTIVATED_SEED_DROP_CHANCE)seeds+=1;
+          if(seeds)addItem(state,crop.seedId,seeds,{areaId,preferred:"storage"});
+          plot.phase="regrowing";
+          plot.mature=false;
+          plot.remaining=crop.growthDays;
+          plot.charges=0;
+          plot.maxCharges=yieldQty;
+          plot.fertility=0;
+          plot.cycle=(plot.cycle||0)+1;
+          plot.harvestedThisCycle=0;
+          summary.push(`${areaId}：${crop.name}自动收割，产出${ITEMS[feedItemId].name}×${yieldQty}已入库`);
+          addLog(state,`${areaId}：${crop.name}成熟并自动收割，制成${ITEMS[feedItemId].name}×${yieldQty}${seeds?`、${ITEMS[crop.seedId].name}×${seeds}`:""}已入库。`);
+        }else{
+          plot.phase="ready";plot.mature=true;plot.maxCharges=yieldQty;plot.charges=plot.maxCharges;
+          summary.push(`${areaId}：家养${crop.name}已经长满（${plot.charges}/${plot.maxCharges}）`);
+        }
       }
       plot.watered=false;plot.fertilized=false;
     }
@@ -5032,17 +5215,22 @@ function resolveAutomaticFeeding(state,summary){
     let fedPens=0,feedUsed=0,unfedPens=0,damagedPens=0;
     for(const type of AUTOMATIC_FEED_ORDER){
       const slots=getAnimalPenSlots(state,type,areaId);
-      const cost=Number(LIVESTOCK[type]?.feed?.feed??0);
+      const feedItem=Object.keys(LIVESTOCK[type]?.feed??{})[0]??"feed";
+      const cost=Number(LIVESTOCK[type]?.feed?.[feedItem]??0);
       for(const slot of slots){
         const penAnimals=slot.animals.filter(animal=>!animal.fed);
         if(!penAnimals.length)continue;
         if(slot.progress.damaged){damagedPens+=1;continue;}
-        if(!cost||!consumeLocalStorageItem(state,"feed",cost,areaId)){unfedPens+=1;continue;}
+        let fed=false;
+        if(cost&&consumeLocalStorageItem(state,feedItem,cost,areaId)){
+          fed=true;
+        }
+        if(!fed){unfedPens+=1;continue;}
         for(const animal of penAnimals)animal.fed=true;
         fedPens+=1;feedUsed+=cost;
       }
     }
-    if(fedPens)summary.push(`${areaId}：自动喂食机按猪、牛、羊、鸡的顺序喂养${fedPens}座栏舍，消耗饲料${feedUsed}`);
+    if(fedPens)summary.push(`${areaId}：自动喂食机喂养${fedPens}座栏舍`);
     if(damagedPens)summary.push(`${areaId}：${damagedPens}座栏舍因损坏未自动喂养，请先修复`);
     if(unfedPens)summary.push(`${areaId}：另有${unfedPens}座栏舍因当地普通储物格饲料不足未喂养`);
   }

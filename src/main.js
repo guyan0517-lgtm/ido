@@ -56,7 +56,10 @@ import {
   applyYesterdayDiet,
   storeAllSeeds,
   upgradePastureToGreenhouse,
-  upgradeHerbFieldToGreenhouse
+  upgradeHerbFieldToGreenhouse,
+  plantPasturePlot,
+  waterPasturePlot,
+  fertilizePasturePlot
 } from "./engine.js";
 import { captureInventoryScrollPositions, formatOutdoorRiskDescription, renderAnimalRunaways, renderBlueprintReference, renderCombat, renderCropDeaths, renderDietPicker, renderEncounterResult, renderEnding, renderEndDayConfirmation, renderEquipmentPicker, renderGreenhouseUpgradeConfirmation, renderHappinessDetails, renderItemDetails, renderItemReference, renderItemTransferActions, renderLottery, renderMap, renderMonkeyGift, renderMonkeyLosses, renderMoveConfirmation, renderReceivedMails, renderReinforcementConfirmation, renderSeedPicker, renderStaminaGuide, renderStatus, renderSurvivalMetricDetails, renderTemperatureGuide, renderTradeConfirmation, renderUprootConfirmation, renderView, renderWeatherDetails, renderWoundTreatmentPicker, restoreInventoryScrollPositions } from "./ui.js";
 
@@ -509,7 +512,12 @@ function runAction(target) {
         deferredInstallPrompt = null;
       });
     } else {
-      showToast("在浏览器菜单选择添加到主屏幕即可");
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (isStandalone) {
+        showToast("已安装到主屏幕");
+      } else {
+        showToast("点击浏览器菜单，选择添加到主屏幕或安装应用");
+      }
     }
     return;
   }
@@ -591,6 +599,7 @@ function runAction(target) {
   if (action === "unequip") {const result=unequipItem(state,target.dataset.slot);if(result.ok&&modal.open)modal.close();return resolveResult(result,()=>{});}
   if (action === "use-medical") {const result=useMedical(state,target.dataset.item);if(result.ok&&modal.open&&modal.dataset.kind==="wound-treatment")modal.close();return resolveResult(result,()=>{});}
   if (action === "choose-seed") return showModal(renderSeedPicker(state,target.dataset.bed),"seed-picker");
+  if (action === "plant-specific") {const result=plantCrop(state,target.dataset.crop,target.dataset.bed??null);return resolveResult(result,()=>{});}
   if (action === "plant") {const result=plantCrop(state,target.dataset.crop,target.dataset.bed??null);if(result.ok&&modal.open&&modal.dataset.kind==="seed-picker")modal.close();return resolveResult(result,()=>{});}
   if (action === "water") return resolveResult(waterPlot(state,target.dataset.plot),()=>{});
   if (action === "fertilize") return resolveResult(fertilizePlot(state,target.dataset.plot),()=>{});
@@ -600,6 +609,9 @@ function runAction(target) {
   if (action === "water-herb-field") return resolveResult(waterHerbField(state),render);
   if (action === "fertilize-herb-field") return resolveResult(fertilizeHerbField(state),render);
   if (action === "harvest-herb-field") return resolveResult(harvestHerbField(state),render);
+  if (action === "plant-pasture-plot") return resolveResult(plantPasturePlot(state, target.dataset.crop), render);
+  if (action === "water-pasture-plot") return resolveResult(waterPasturePlot(state, target.dataset.crop), render);
+  if (action === "fertilize-pasture-plot") return resolveResult(fertilizePasturePlot(state, target.dataset.crop), render);
   if (action === "uproot") return showModal(renderUprootConfirmation(state,target.dataset.plot),"uproot-confirm");
   if (action === "cancel-uproot") {if(modal.open)modal.close();return;}
   if (action === "confirm-uproot") {const result=uprootCrop(state,target.dataset.plot);if(result.ok&&modal.open)modal.close();return resolveResult(result,()=>{});}
@@ -1081,39 +1093,6 @@ function applyCustomIcon(dataUrl) {
   if (appleIcon) appleIcon.href = dataUrl;
   const icons = document.querySelectorAll('link[rel="icon"]');
   icons.forEach((el) => { el.href = dataUrl; });
-  try {
-    const dynamicManifest = {
-      name: "我一定要活下来",
-      short_name: "我一定要活下来",
-      description: "我一定要活下来",
-      start_url: "./index.html",
-      scope: "./",
-      display: "standalone",
-      orientation: "portrait-primary",
-      background_color: "#101417",
-      theme_color: "#101417",
-      icons: [
-        {
-          src: dataUrl,
-          sizes: "192x192",
-          type: "image/png",
-          purpose: "any maskable"
-        },
-        {
-          src: dataUrl,
-          sizes: "512x512",
-          type: "image/png",
-          purpose: "any maskable"
-        }
-      ]
-    };
-    const blob = new Blob([JSON.stringify(dynamicManifest)], { type: "application/manifest+json" });
-    const blobUrl = URL.createObjectURL(blob);
-    const manifestLink = document.querySelector('link[rel="manifest"]');
-    if (manifestLink) {
-      manifestLink.href = blobUrl;
-    }
-  } catch (e) {}
 }
 
 function uploadCustomIcon() {

@@ -383,10 +383,10 @@ const facilityRows = [
   ["warehouse","仓库",5,{plank:3,stone:2},2,2,{storage:20}],
   ["seed_storage_room","种子储存室",5,{steel:2,plank:2,concrete:2},1,3,{seedStorage:20},{blueprintTier:3}],
   ["utility_room","杂物间",5,{steel:2,plank:3,concrete:3},1.5,3,{utilityStorage:30},{blueprintTier:3}],
-  ["chicken_coop","鸡舍",4,{plank:2,rope:1},1,2,{animal:"chicken",capacity:2},{maxPerArea:2,completionBlueprints:["feed"]}],["smokehouse","晾晒棚",3,{wood:3,rope:1},1,0,{capacity:5},{blueprintTier:2,noHouseRequired:true}],["rain_collector","集水器",3,{plank:2,rope:1},1,2,{rainWater:3},{maxPerArea:4}],
+  ["chicken_coop","鸡舍",4,{plank:2,rope:1},1,2,{animal:"chicken",capacity:2},{maxPerArea:2,completionBlueprints:["feed"],noBlueprintRequired:true}],["smokehouse","晾晒棚",3,{wood:3,rope:1},1,0,{capacity:5},{blueprintTier:2,noHouseRequired:true}],["rain_collector","集水器",3,{plank:2,rope:1},1,2,{rainWater:3},{maxPerArea:4}],
   ["drainage_ditch","排水沟",3,{stone:3,clay:2,wood:1},1,2,{acidRainFacilityProtection:20}],["bathroom","浴室",4,{plank:2,stone:2,rope:1},1.5,2,{happiness:4}],["masonry_table","石工台",4,{stone:4,plank:1},1.5,2,{capacity:4}],
-  ["cellar","地窖",6,{stone_brick:3,plank:2},2,3,{coldStorage:10}],["cellar_expansion","大地窖",5,{cement:1,plank:2,iron_ingot:1,brick:4},2,4,{coldStorage:15}],["sheep_pen","羊圈",5,{plank:3,stone:2},2,2,{animal:"sheep",capacity:2},{maxPerArea:2,completionBlueprints:["feed"]}],
-  ["cattle_pen","牛圈",6,{plank:3,stone:2},2,2,{animal:"cattle",capacity:1},{maxPerArea:2,completionBlueprints:["feed"]}],["pig_pen","猪圈",5,{plank:3,stone:2},2,2,{animal:"pig",capacity:2},{maxPerArea:2,completionBlueprints:["feed"]}],["auto_feeder","自动喂食机",5,{brick:2,iron_ingot:1,clay:2},2,3,{autoFeed:true},{blueprintTier:2}],["beehive_box","蜂箱",4,{plank:2,honeycomb:1},1,3,{bees:true},{maxPerArea:4}],["toilet","厕所",5,{stone_brick:2,plank:1,clay:2},2,3,{happiness:4}],
+  ["cellar","地窖",6,{stone_brick:3,plank:2},2,3,{coldStorage:10}],["cellar_expansion","大地窖",5,{cement:1,plank:2,iron_ingot:1,brick:4},2,4,{coldStorage:15}],["sheep_pen","羊圈",5,{plank:3,stone:2},2,2,{animal:"sheep",capacity:2},{maxPerArea:2,completionBlueprints:["feed"],noBlueprintRequired:true}],
+  ["cattle_pen","牛圈",6,{plank:3,stone:2},2,2,{animal:"cattle",capacity:1},{maxPerArea:2,completionBlueprints:["feed"],noBlueprintRequired:true}],["pig_pen","猪圈",5,{plank:3,stone:2},2,2,{animal:"pig",capacity:2},{maxPerArea:2,completionBlueprints:["feed"],noBlueprintRequired:true}],["auto_feeder","自动喂食机",5,{brick:2,iron_ingot:1,clay:2},2,3,{autoFeed:true},{blueprintTier:2}],["beehive_box","蜂箱",4,{plank:2,honeycomb:1},1,3,{bees:true},{maxPerArea:4}],["toilet","厕所",5,{stone_brick:2,plank:1,clay:2},2,3,{happiness:4}],
   ["well","水井",6,{stone_brick:4,iron_ingot:1},2,3,{water:10}],["fireplace","壁炉",4,{stone_brick:3,iron_ingot:1},1.5,3,{temperature:6,fuelDaily:3,heating:true,heatingFuelReduction:.3}],["vent_hood","通风风帽",4,{stone_brick:2,plank:2,rope:1},1.5,3,{cooling:3,sickReduction:.1}],
   ["wind_shutters","防风百叶窗",1,{hardwood:4,iron_ingot:2},1.5,3,{stormFacilityProtection:20},{blueprintTier:3}],
   ["drip_irrigation","滴灌架",4,{plank:2,clay:2,iron_ingot:1},1.5,3,{autoWater:true}],
@@ -408,21 +408,26 @@ const facilityRows = [
   ["ice_cellar","冰窖",6,{concrete:2,steel:2,stone_brick:4,plank:4},2.5,5,{coldStorage:30},{noBlueprintRequired:true,prerequisites:["cellar_expansion"],replaces:"cellar_expansion"}],
   ["farm_expansion","扩耕",4,{wood:6,rope:4,soil:6,fertilizer:2},2,5,{farmExpanded:true},{noBlueprintRequired:true}],
   ["pasture","草场",5,{wood:6,plank:6,grass:10},2.5,5,{pasture:true},{noBlueprintRequired:true,prerequisites:["farm_expansion"]}],
+  ["grass_field","草地",1,{soil:3,fertilizer:1},.5,1,{plots:1},{maxPerArea:10,earlyBlueprint:true,noBlueprintRequired:true,completionItems:{grass_seed:2}}],
+  ["corn_field","玉米地",1,{soil:3,fertilizer:1},.5,1,{plots:1},{maxPerArea:10,earlyBlueprint:true,noBlueprintRequired:true,completionItems:{corn_seed:2}}],
   ["herb_field","药田",4,{wood:4,stone:4,soil:4,fertilizer:2},2,5,{herbField:true},{noBlueprintRequired:true,maxPerArea:1}],
-  ["fishery","渔场",4,{wood:4,stone:4,plank:2},1.5,2,{animal:"fish",capacity:4},{maxPerArea:2,completionBlueprints:["fish_feed"]}],
+  ["fishery","渔场",4,{wood:4,stone:4,plank:2},1.5,1,{animal:"fish",capacity:4},{maxPerArea:2,completionBlueprints:["fish_feed"],noBlueprintRequired:true,completionItems:{fry:2}}],
+  ["crab_pen","蟹场",4,{wood:4,stone:4,plank:2},1.5,1,{animal:"crab",capacity:4},{maxPerArea:2,completionBlueprints:["fish_feed"],noBlueprintRequired:true,completionItems:{crab_larva:2}}],
   ["aqueduct","水渠",6,{stone_brick:3,wood:3},2,3,{seawaterDaily:3},{maxPerArea:1,noBlueprintRequired:true}],
   ["aqueduct_upgraded","高级水渠",7,{steel:1,brick:2,clay:2},2,4,{seawaterDaily:5},{maxPerArea:1,noBlueprintRequired:true,prerequisites:["aqueduct"],replaces:"aqueduct"}]
 ];
 addItem("fresh_herb","新鲜药草","material");
 addItem("corn","玉米","material");
-addItem("fish_feed","鱼饲料","material");
+addItem("fish_feed","玉米饲料","material");
 addItem("fry","鱼苗","material");
 addItem("crab_larva","蟹苗","material");
 addItem("fish_meat","鱼肉","food",{hunger:12,happiness:2});
 addItem("crab_meat","蟹肉","food",{hunger:15,happiness:3});
 addRecipe("medicine_fresh","特效药剂",{fresh_herb:1,honey:1,water:1},"medicine","cooking_table",2);
 addRecipe("dry_herb","草药",{fresh_herb:1},"herb","workbench",1);
-addRecipe("craft_fish_feed","鱼饲料",{corn:1},"fish_feed","workbench",1);
+addRecipe("craft_fish_feed","玉米饲料",{corn:1},"fish_feed","workbench",1);
+addRecipe("craft_grass_seed","草种",{grass:2},"grass_seed","workbench",1);
+addRecipe("craft_corn_seed","玉米种子",{corn:1},"corn_seed","workbench",1);
 for (const row of facilityRows) facility(...row);
 // 同一地块只能建造一座的生产设施视为近乎不限次；允许同类多座/多件的生产工具保留各自原始产能与既有共用/累加方式。
 for(const definition of Object.values(FACILITIES))if(Number(definition.effect?.capacity??0)>0&&(definition.maxPerArea??1)===1)definition.effect.capacity=99;
@@ -533,8 +538,8 @@ export const CONTENT_COUNTS = {
 export const INITIAL_BLUEPRINT_IDS=[
   "rope","firewood","wood_stick","stone_knife","stone_axe","stone_pick","wood_bucket","stone_brick",
   "drink_hot_water","drink_ice_water",
-  "bonfire","workbench","warehouse","planting_bed",
-  "masonry_table","cellar","drip_irrigation","sheep_pen",
+  "bonfire","workbench","warehouse","planting_bed","grass_field","corn_field",
+  "masonry_table","cellar","drip_irrigation","sheep_pen","chicken_coop","cattle_pen","pig_pen","fishery","crab_pen",
   "brick_kiln","smelter","smithy",
   "grass_curtain","storage_chest","wood_needle"
 ];
