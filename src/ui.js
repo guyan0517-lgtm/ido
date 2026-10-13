@@ -671,6 +671,7 @@ const PEN_TYPES={chicken_coop:"chicken",sheep_pen:"sheep",cattle_pen:"cattle",pi
 const ANIMAL_LABELS={chicken:{adult:"鸡",young:"小鸡"},sheep:{adult:"羊",young:"羊羔"},cattle:{adult:"牛",young:"牛犊"},pig:{adult:"猪",young:"猪仔"},fish:{adult:"鱼",young:"鱼苗"},crab:{adult:"螃蟹",young:"蟹苗"}};
 const MANAGED_FACILITY_ORDER=["planting_bed","grass_field","corn_field","herb_field","chicken_coop","sheep_pen","cattle_pen","pig_pen","fishery","crab_pen","pasture"];
 const MANAGED_FACILITIES=new Set(MANAGED_FACILITY_ORDER);
+const CRAFTING_BENCH_IDS=new Set(["workbench","cooking_table","compost","chemical_table","textile_table","brewing_table","smokehouse","masonry_table","brick_kiln","smelter","glass_furnace","smithy","boatwright_bench","machine_shop"]);
 const PRODUCTION_FURNITURE_IDS=Object.keys(DEVICES);
 const LIVESTOCK_PRODUCT_DISPLAY_ORDER={
   chicken:["chicken_meat","egg","feather","manure"],
@@ -861,10 +862,11 @@ function renderFarmControls(state, filterBaseId="planting_bed"){
   const slots=allSlots.filter(s=>s.bedId.replace(/__\d+$/u,"")===filterBaseId);
   const capacity=slots.length;
   const facilityDef=BUILDINGS[filterBaseId];
-  const facilityName=facilityDef?.name??(filterBaseId==="grass_field"?"草地":filterBaseId==="corn_field"?"玉米地":"栽培地");
+  const facilityName=facilityDef?.name??(filterBaseId==="grass_field"?"草地":filterBaseId==="corn_field"?"玉米地":filterBaseId==="herb_field"?"药田":"栽培地");
   const automation=getFarmAutomationCoverage(state),knowsGreenhouse=state.ownedBlueprintIds.includes(BUILDINGS.greenhouse?.blueprintId??"greenhouse");
   const grassSeedCount=countItem(state,"grass_seed");
   const cornSeedCount=countItem(state,"corn_seed");
+  const herbSeedCount=countItem(state,"herb_seed");
   const renderAutoFertilizeSwitch=(bedId,index,status)=>{
     if(!status.available)return "";
     const paused=status.enabled&&!status.operational;
@@ -875,19 +877,22 @@ function renderFarmControls(state, filterBaseId="planting_bed"){
     const conditionText=cultivatedPlotConditionText(state,plot);
     const autoFertilize=getPlotAutoFertilizeStatus(state,bedId);
     const automationText=[index<automation.water?"自动浇水":"",autoFertilize.operational?"自动施肥":""].filter(Boolean).join("、");
-    const isAutoFeedCrop=plot.cropId==="grass"||plot.cropId==="corn"||bedId?.startsWith("grass_field")||bedId?.startsWith("corn_field");
-    const feedItemName=plot.cropId==="corn"||bedId?.startsWith("corn_field")?"玉米饲料":"饲料";
+    const isAutoFeedCrop=plot.cropId==="grass"||plot.cropId==="corn";
+    const feedItemName=plot.cropId==="corn"?"玉米饲料":"饲料";
     const status=isAutoFeedCrop
       ?(ready
         ?`已成熟 · 夜间自动收割制成${feedItemName}入库`
         :plot.phase==="regrowing"
         ?`恢复中，还需${plot.remaining}个浇水日 · 成熟后自动收割制成${feedItemName}`
         :`生长中，还需${plot.remaining}个浇水日 · 成熟后自动收割制成${feedItemName}`)
-      :(ready?`库存${plot.charges}/${plot.maxCharges} · 在探索页采收`:plot.phase==="regrowing"?`恢复中，还需${plot.remaining}个浇水日`:`生长中，还需${plot.remaining}个浇水日`);
+      :(ready?`已成熟 · 可以采摘`:plot.phase==="regrowing"?`恢复中，还需${plot.remaining}个浇水日`:`生长中，还需${plot.remaining}个浇水日`);
     const upgradeButton=knowsGreenhouse&&!environment.greenhouse?`<button class="action-button" data-action="upgrade-greenhouse" data-plot="${plot.id}">升级为温室</button>`:"";
     const fertilityStatus=plot.fertilized?(plot.watered?"（今日结算后+1）":"（还需浇水才会增加）"):"";
     const careCost=ready?"":`<div class="row-detail">每次浇水：水×${environment.heatAffected?2:1} · 体力0.2；每次施肥：肥料×1 · 体力0.2</div>`;
-    return `<div class="facility-subrow farm-plot-row" data-farm-bed="${bedId??""}"><div class="row-main"><strong>家养${crop.name}${conditionText}</strong><div class="row-detail">${status} · 施肥丰饶${plot.fertility}/5${fertilityStatus}${automationText?` · ${automationText}范围内`:""}</div>${careCost}</div><div class="row-actions farm-plot-actions">${ready?"":`<button class="action-button" data-action="water" data-plot="${plot.id}" ${plot.watered?"disabled":""}>浇水</button>${plot.fertility<5?`<button class="action-button" data-action="fertilize" data-plot="${plot.id}" ${plot.fertilized?"disabled":""}>施肥</button>`:""}`}<button class="action-button danger-button" data-action="uproot" data-plot="${plot.id}">拔除</button>${upgradeButton}${renderAutoFertilizeSwitch(bedId,index,autoFertilize)}</div></div>`;
+    const harvestButton=(ready&&!isAutoFeedCrop)?`<button class="action-button primary" data-action="harvest" data-plot="${plot.id}">采摘</button>`:"";
+    const waterButton=(!ready)?`<button class="action-button" data-action="water" data-plot="${plot.id}" ${plot.watered?"disabled":""}>浇水</button>`:"";
+    const fertilizeButton=(!ready&&plot.fertility<5)?`<button class="action-button" data-action="fertilize" data-plot="${plot.id}" ${plot.fertilized?"disabled":""}>施肥</button>`:"";
+    return `<div class="facility-subrow farm-plot-row" data-farm-bed="${bedId??""}"><div class="row-main"><strong>家养${crop.name}${conditionText}</strong><div class="row-detail">${status} · 施肥丰饶${plot.fertility}/5${fertilityStatus}${automationText?` · ${automationText}范围内`:""}</div>${careCost}</div><div class="row-actions farm-plot-actions">${harvestButton}${waterButton}${fertilizeButton}<button class="action-button danger-button" data-action="uproot" data-plot="${plot.id}">拔除</button>${upgradeButton}${renderAutoFertilizeSwitch(bedId,index,autoFertilize)}</div></div>`;
   };
   let displayedSlots=slots;
   let sectionTabs="";
@@ -898,13 +903,14 @@ function renderFarmControls(state, filterBaseId="planting_bed"){
     displayedSlots=slots.slice(currentSection*10,currentSection*10+10);
   }
   const renderEmptySlotAction=(slot)=>{
-    if(filterBaseId==="grass_field"){
-      return `<button class="action-button" data-action="plant-specific" data-crop="grass" data-bed="${slot.bedId}"${slot.progress.damaged||grassSeedCount<=0?" disabled":""}>播种草种</button>`;
+    const emptyUpgradeBtn = knowsGreenhouse && !slot.progress.greenhouse ? `<button class="action-button" data-action="upgrade-bed-greenhouse" data-bed="${slot.bedId}">升级为温室</button>` : "";
+    if(filterBaseId==="grass_field"||filterBaseId==="corn_field"){
+      return `<button class="action-button" data-action="plant-specific" data-crop="grass" data-bed="${slot.bedId}"${slot.progress.damaged||grassSeedCount<=0?" disabled":""}>播种草种</button><button class="action-button" data-action="plant-specific" data-crop="corn" data-bed="${slot.bedId}"${slot.progress.damaged||cornSeedCount<=0?" disabled":""}>播种玉米</button>${emptyUpgradeBtn}`;
     }
-    if(filterBaseId==="corn_field"){
-      return `<button class="action-button" data-action="plant-specific" data-crop="corn" data-bed="${slot.bedId}"${slot.progress.damaged||cornSeedCount<=0?" disabled":""}>播种玉米</button>`;
+    if(filterBaseId==="herb_field"){
+      return `<button class="action-button" data-action="plant-specific" data-crop="herb" data-bed="${slot.bedId}"${slot.progress.damaged||herbSeedCount<=0?" disabled":""}>播种草药</button>${emptyUpgradeBtn}`;
     }
-    return `<button class="action-button" data-action="choose-seed" data-bed="${slot.bedId}"${slot.progress.damaged?" disabled":""}>选择种子</button>`;
+    return `<button class="action-button" data-action="choose-seed" data-bed="${slot.bedId}"${slot.progress.damaged?" disabled":""}>选择种子</button>${emptyUpgradeBtn}`;
   };
   const rows=displayedSlots.map(slot=>slot.plot
     ? renderPlotRow(slot.plot,slot.index,slot.bedId)
@@ -1033,8 +1039,7 @@ function renderBuiltFacilityRow(state,id,progress,includeFarmControls){
   }
   else if(PEN_TYPES[baseId])controls=renderAnimalControls(state,PEN_TYPES[baseId]);
   else if(baseId==="pasture")controls=renderPastureControls(state);
-  else if(baseId==="herb_field")controls=renderHerbFieldControls(state);
-  else if(baseId==="grass_field"||baseId==="corn_field"||baseId==="planting_bed")controls=renderFarmControls(state,baseId);
+  else if(baseId==="herb_field"||baseId==="grass_field"||baseId==="corn_field"||baseId==="planting_bed")controls=renderFarmControls(state,baseId);
   else if(includeFarmControls)controls=renderFarmControls(state);
   return `<div class="management-row"><div class="management-row-head${definition.switchable?" management-row-head-toggle":""}"><div class="row-main"><div class="row-title">${displayName}</div><div class="row-detail">${describeFacility(baseId,definition,state)}${automaticFeedStatus}${usesFuel?` · 当前每日消耗${fuelCost}点`:""}${statusText?` · ${statusText}`:""}</div></div><div class="row-actions">${actions.join("")}</div></div>${controls}</div>`;
 }
@@ -1048,12 +1053,10 @@ function renderManagedFacilityRow(state,baseId,instances){
     }
   }
   const damagedCount = instances.filter(([,progress]) => progress.damaged).length;
-  const controls = (baseId === "planting_bed" || baseId === "grass_field" || baseId === "corn_field")
+  const controls = (baseId === "planting_bed" || baseId === "grass_field" || baseId === "corn_field" || baseId === "herb_field")
     ? renderFarmControls(state, baseId)
     : baseId === "pasture"
     ? renderPastureControls(state)
-    : baseId === "herb_field"
-    ? renderHerbFieldControls(state)
     : renderAnimalControls(state, PEN_TYPES[baseId]);
   return `<div class="management-row managed-facility-row" data-managed-facility="${baseId}"><div class="management-row-head"><div class="row-main"><div class="row-title">${displayName}</div><div class="row-detail">${describeFacility(baseId,definition,state)}${damagedCount?` · 已损坏${damagedCount}座`:""}</div></div><div class="row-actions">${actions.join("")}</div></div>${controls}</div>`;
 }
@@ -1192,10 +1195,10 @@ export function renderFacilities(state){
   const houseRow=houseLevel?`<div class="management-row"><div class="management-row-head"><div class="row-main"><div class="row-title">${house.name}</div><div class="row-detail">房屋 · 空间${house.space} · 保暖${house.warmth}℃ · 酸雨设施防护${house.acidRainFacilityProtection} · 强风设施防护${house.stormFacilityProtection}</div></div>${reinforcementActive?"":`<button class="action-button" data-action="reinforce">临时加固</button>`}</div></div>`:"";
 
   const isLandscape=(baseId,definition)=>{
-    if(["brick_kiln","smelter","smithy","glass_furnace"].includes(baseId))return true;
-    if(MANAGED_FACILITIES.has(baseId))return false;
-    if(["auto_fertilizer","pasture","herb_field"].includes(baseId))return false;
     if(definition.switchable)return false;
+    if(MANAGED_FACILITIES.has(baseId))return false;
+    if(["mining_machine","auto_fertilizer","distribution_room","pasture","herb_field"].includes(baseId)||PEN_TYPES[baseId])return false;
+    if(CRAFTING_BENCH_IDS.has(baseId)||Object.values(RECIPES).some(r=>r.station===baseId))return true;
     if(definition.productionFuelCost||definition.capacity||definition.effect?.capacity)return false;
     if(definition.autoWater||definition.autoFeed||definition.autoFertilize||definition.effect?.autoWater||definition.effect?.autoFeed||definition.effect?.autoFertilize)return false;
     if(definition.water||definition.power||definition.powerGeneration||definition.gridAccess||definition.effect?.water||definition.effect?.power||definition.effect?.powerGeneration||definition.effect?.gridAccess)return false;
@@ -1582,9 +1585,12 @@ export function renderSeedPicker(state,bedId){
   const facilityName=BUILDINGS[baseId]?.name??"栽培地";
   if(slot.progress.damaged)return `<h2>这块${facilityName}已损坏</h2><p>${slot.progress.greenhouse?"温室升级仍然保留，":""}修复后才能播种。</p>`;
   if(slot.plot)return `<h2>这块${facilityName}已经种了东西</h2>`;
-  const filterCrop=baseId==="grass_field"?"grass":baseId==="corn_field"?"corn":null;
-  const allCrops=filterCrop?[CROPS[filterCrop]]:Object.values(CROPS);
-  const options=allCrops.filter(Boolean).map(crop=>({crop,quantity:countItem(state,crop.seedId)})).filter(entry=>entry.quantity>0);
+  const allowedCrops=(baseId==="grass_field"||baseId==="corn_field")
+    ?[CROPS.grass,CROPS.corn]
+    :baseId==="herb_field"
+    ?[CROPS.herb]
+    :Object.values(CROPS);
+  const options=allowedCrops.filter(Boolean).map(crop=>({crop,quantity:countItem(state,crop.seedId)})).filter(entry=>entry.quantity>0);
   const buttons=options.map(({crop,quantity})=>`<button class="action-button" data-action="plant" data-crop="${crop.id}" data-bed="${bedId}">${ITEMS[crop.seedId].name} ×${quantity}</button>`).join("");
   return `<h2>选择种子</h2><p class="row-detail">${slot.progress.greenhouse?`这块${facilityName}已永久升级为温室，改种后仍受温室保护。`:""}种植会消耗1份种子和1点体力。</p><div class="row-actions">${buttons||`<span class="row-detail">当前地块和背包里没有可播种的种子</span>`}</div>`;
 }
@@ -1595,6 +1601,16 @@ export function renderGreenhouseUpgradeConfirmation(state,plotId){
   if(getPlotEnvironmentEffects(state,plot).greenhouse)return `<h2>这块栽培地已经是温室</h2>`;
   const missingMaterials=Object.entries(definition.inputs).some(([itemId,quantity])=>countItem(state,itemId,state.position)<quantity),missingStamina=state.player.stamina<definition.stamina;
   return `<h2>将家养${crop.name}升级为温室？</h2><p>升级会永久保留在这块栽培地上；以后即使拔除并改种其他作物，仍不受酸雨和酷暑影响。</p><div class="end-day-warning"><strong>升级需要</strong><p>${formatConstructionInputs(state,definition.inputs)} · <span class="construction-material${missingStamina?" insufficient":""}">体力 ${formatStamina(state.player.stamina)}/${formatStamina(definition.stamina)}</span></p></div><div class="row-actions"><button class="secondary-button" data-action="cancel-greenhouse-upgrade">取消</button><button class="action-button primary" data-action="confirm-greenhouse-upgrade" data-plot="${plot.id}" ${missingMaterials||missingStamina?"disabled":""}>确定升级</button></div>`;
+}
+
+export function renderBedGreenhouseUpgradeConfirmation(state,bedId){
+  const slot=getFarmPlotSlots(state).find(entry=>entry.bedId===bedId);
+  const baseId=bedId.replace(/__\d+$/u,""),facilityName=BUILDINGS[baseId]?.name??"地块";
+  if(!slot)return `<h2>这处${facilityName}已经不存在了</h2>`;
+  if(slot.progress.greenhouse)return `<h2>这块${facilityName}已经是温室</h2>`;
+  const definition=BUILDINGS.greenhouse;
+  const missingMaterials=Object.entries(definition.inputs).some(([itemId,quantity])=>countItem(state,itemId,state.position)<quantity),missingStamina=state.player.stamina<definition.stamina;
+  return `<h2>将这块${facilityName}升级为温室？</h2><p>升级会永久保留在这块${facilityName}上；以后即使拔除并改种其他作物，仍不受酸雨和酷暑影响。</p><div class="end-day-warning"><strong>升级需要</strong><p>${formatConstructionInputs(state,definition.inputs)} · <span class="construction-material${missingStamina?" insufficient":""}">体力 ${formatStamina(state.player.stamina)}/${formatStamina(definition.stamina)}</span></p></div><div class="row-actions"><button class="secondary-button" data-action="cancel-greenhouse-upgrade">取消</button><button class="action-button primary" data-action="confirm-bed-greenhouse-upgrade" data-bed="${bedId}" ${missingMaterials||missingStamina?"disabled":""}>确定升级</button></div>`;
 }
 
 export function renderReceivedMails(mails){

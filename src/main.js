@@ -45,6 +45,7 @@ import {
   togglePlotAutoFertilize,
   unequipItem,
   upgradePlotToGreenhouse,
+  upgradeBedToGreenhouse,
   uprootCrop,
   useMedical,
   waterPlot,
@@ -61,7 +62,7 @@ import {
   waterPasturePlot,
   fertilizePasturePlot
 } from "./engine.js";
-import { captureInventoryScrollPositions, formatOutdoorRiskDescription, renderAnimalRunaways, renderBlueprintReference, renderCombat, renderCropDeaths, renderDietPicker, renderEncounterResult, renderEnding, renderEndDayConfirmation, renderEquipmentPicker, renderGreenhouseUpgradeConfirmation, renderHappinessDetails, renderItemDetails, renderItemReference, renderItemTransferActions, renderLottery, renderMap, renderMonkeyGift, renderMonkeyLosses, renderMoveConfirmation, renderReceivedMails, renderReinforcementConfirmation, renderSeedPicker, renderStaminaGuide, renderStatus, renderSurvivalMetricDetails, renderTemperatureGuide, renderTradeConfirmation, renderUprootConfirmation, renderView, renderWeatherDetails, renderWoundTreatmentPicker, restoreInventoryScrollPositions } from "./ui.js";
+import { captureInventoryScrollPositions, formatOutdoorRiskDescription, renderAnimalRunaways, renderBlueprintReference, renderCombat, renderCropDeaths, renderDietPicker, renderEncounterResult, renderEnding, renderEndDayConfirmation, renderEquipmentPicker, renderGreenhouseUpgradeConfirmation, renderBedGreenhouseUpgradeConfirmation, renderHappinessDetails, renderItemDetails, renderItemReference, renderItemTransferActions, renderLottery, renderMap, renderMonkeyGift, renderMonkeyLosses, renderMoveConfirmation, renderReceivedMails, renderReinforcementConfirmation, renderSeedPicker, renderStaminaGuide, renderStatus, renderSurvivalMetricDetails, renderTemperatureGuide, renderTradeConfirmation, renderUprootConfirmation, renderView, renderWeatherDetails, renderWoundTreatmentPicker, restoreInventoryScrollPositions } from "./ui.js";
 
 import { renderGameInfo, renderSettings, setActiveProductionCategory } from "./ui.js";
 import { getLanguage, hasLanguagePreference, localizePage, setLanguage, t } from "./i18n.js";
@@ -616,8 +617,10 @@ function runAction(target) {
   if (action === "cancel-uproot") {if(modal.open)modal.close();return;}
   if (action === "confirm-uproot") {const result=uprootCrop(state,target.dataset.plot);if(result.ok&&modal.open)modal.close();return resolveResult(result,()=>{});}
   if(action==="upgrade-greenhouse")return showModal(renderGreenhouseUpgradeConfirmation(state,target.dataset.plot),"greenhouse-upgrade-confirm");
+  if(action==="upgrade-bed-greenhouse")return showModal(renderBedGreenhouseUpgradeConfirmation(state,target.dataset.bed),"greenhouse-upgrade-confirm");
   if(action==="cancel-greenhouse-upgrade"){if(modal.open)modal.close();return;}
   if(action==="confirm-greenhouse-upgrade"){const result=upgradePlotToGreenhouse(state,target.dataset.plot);if(result.ok&&modal.open)modal.close();return resolveResult(result,()=>{});}
+  if(action==="confirm-bed-greenhouse-upgrade"){const result=upgradeBedToGreenhouse(state,target.dataset.bed);if(result.ok&&modal.open)modal.close();return resolveResult(result,()=>{});}
   if (action === "add-animal") return resolveResult(addAnimalToPen(state,target.dataset.animalType,target.dataset.pen??null),()=>{});
   if (action === "feed") return resolveResult(feedAnimals(state,target.dataset.animalType,target.dataset.pen??null),()=>{});
   if (action === "trade") return showModal(renderTradeConfirmation(state,target.dataset.offer),"trade-confirm");

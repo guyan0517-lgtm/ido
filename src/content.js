@@ -410,7 +410,7 @@ const facilityRows = [
   ["pasture","草场",5,{wood:6,plank:6,grass:10},2.5,5,{pasture:true},{noBlueprintRequired:true,prerequisites:["farm_expansion"]}],
   ["grass_field","草地",1,{soil:3,fertilizer:1},.5,1,{plots:1},{maxPerArea:10,earlyBlueprint:true,noBlueprintRequired:true,completionItems:{grass_seed:2}}],
   ["corn_field","玉米地",1,{soil:3,fertilizer:1},.5,1,{plots:1},{maxPerArea:10,earlyBlueprint:true,noBlueprintRequired:true,completionItems:{corn_seed:2}}],
-  ["herb_field","药田",4,{wood:4,stone:4,soil:4,fertilizer:2},2,5,{herbField:true},{noBlueprintRequired:true,maxPerArea:1}],
+  ["herb_field","药田",4,{wood:4,stone:4,soil:4,fertilizer:2},2,5,{plots:1,herbField:true},{noBlueprintRequired:true,maxPerArea:5,earlyBlueprint:true,completionItems:{herb_seed:2}}],
   ["fishery","渔场",4,{wood:4,stone:4,plank:2},1.5,1,{animal:"fish",capacity:4},{maxPerArea:2,completionBlueprints:["fish_feed"],noBlueprintRequired:true,completionItems:{fry:2}}],
   ["crab_pen","蟹场",4,{wood:4,stone:4,plank:2},1.5,1,{animal:"crab",capacity:4},{maxPerArea:2,completionBlueprints:["fish_feed"],noBlueprintRequired:true,completionItems:{crab_larva:2}}],
   ["aqueduct","水渠",6,{stone_brick:3,wood:3},2,3,{seawaterDaily:3},{maxPerArea:1,noBlueprintRequired:true}],
@@ -425,6 +425,7 @@ addItem("fish_meat","鱼肉","food",{hunger:12,happiness:2});
 addItem("crab_meat","蟹肉","food",{hunger:15,happiness:3});
 addRecipe("medicine_fresh","特效药剂",{fresh_herb:1,honey:1,water:1},"medicine","cooking_table",2);
 addRecipe("dry_herb","草药",{fresh_herb:1},"herb","workbench",1);
+addRecipe("craft_herb_seed","草药种子",{fresh_herb:1},"herb_seed","workbench",1);
 addRecipe("craft_fish_feed","玉米饲料",{corn:1},"fish_feed","workbench",1);
 addRecipe("craft_grass_seed","草种",{grass:2},"grass_seed","workbench",1);
 addRecipe("craft_corn_seed","玉米种子",{corn:1},"corn_seed","workbench",1);
@@ -538,7 +539,7 @@ export const CONTENT_COUNTS = {
 export const INITIAL_BLUEPRINT_IDS=[
   "rope","firewood","wood_stick","stone_knife","stone_axe","stone_pick","wood_bucket","stone_brick",
   "drink_hot_water","drink_ice_water",
-  "bonfire","workbench","warehouse","planting_bed","grass_field","corn_field",
+  "bonfire","workbench","warehouse","planting_bed","grass_field","corn_field","herb_field",
   "masonry_table","cellar","drip_irrigation","sheep_pen","chicken_coop","cattle_pen","pig_pen","fishery","crab_pen",
   "brick_kiln","smelter","smithy",
   "grass_curtain","storage_chest","wood_needle"

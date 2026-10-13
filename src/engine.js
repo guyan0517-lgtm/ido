@@ -2808,17 +2808,41 @@ function completedPlantingBeds(state,areaId,includeDamaged=false){
   return Object.entries(state.buildingsByArea[areaId]??{})
     .filter(([id,progress])=>{
       const baseId=id.replace(/__\d+$/u,"");
-      return (baseId==="planting_bed"||baseId==="grass_field"||baseId==="corn_field")&&progress.completed&&(includeDamaged||!progress.damaged);
+      return (baseId==="planting_bed"||baseId==="grass_field"||baseId==="corn_field"||baseId==="herb_field")&&progress.completed&&(includeDamaged||!progress.damaged);
     })
     .sort(([,left],[,right])=>(left.completedOrder??0)-(right.completedOrder??0));
 }
 
 function ensurePlotBedAssignments(state,areaId){
   const plots=state.plotsByArea[areaId]??[],beds=completedPlantingBeds(state,areaId,true),validIds=new Set(beds.map(([id])=>id)),used=new Set();
+  const legacyHerb=state.herbFieldsByArea?.[areaId];
+  if(legacyHerb&&legacyHerb.planted&&!plots.some(p=>p.cropId==="herb")){
+    const herbBed=beds.find(([id])=>id.replace(/__\d+$/u,"")==="herb_field");
+    if(herbBed){
+      plots.push({
+        id:`plot_${state.day}_herb_migrated`,
+        bedId:herbBed[0],
+        cropId:"herb",
+        phase:legacyHerb.mature?"ready":"growing",
+        remaining:legacyHerb.remaining??5,
+        charges:legacyHerb.mature?12:0,
+        maxCharges:12,
+        watered:Boolean(legacyHerb.watered),
+        fertilized:Boolean(legacyHerb.fertilized),
+        fertility:legacyHerb.fertility??0,
+        mature:Boolean(legacyHerb.mature),
+        greenhouse:Boolean(legacyHerb.greenhouse||herbBed[1].greenhouse),
+        cycle:0,
+        harvestedThisCycle:0
+      });
+      if(legacyHerb.greenhouse)herbBed[1].greenhouse=true;
+      delete state.herbFieldsByArea[areaId];
+    }
+  }
   for(const plot of plots){
     if(plot.bedId&&validIds.has(plot.bedId)&&!used.has(plot.bedId))used.add(plot.bedId);
     else{
-      const preferredBase = plot.cropId === "grass" ? "grass_field" : plot.cropId === "corn" ? "corn_field" : "planting_bed";
+      const preferredBase = plot.cropId === "grass" ? "grass_field" : plot.cropId === "corn" ? "corn_field" : plot.cropId === "herb" ? "herb_field" : "planting_bed";
       const available=beds.find(([id])=>!used.has(id)&&id.replace(/__\d+$/u,"")===preferredBase) || beds.find(([id])=>!used.has(id));
       if(available){plot.bedId=available[0];used.add(available[0]);}
     }
@@ -3006,11 +3030,18 @@ export function getCultivatedHarvestMethod(state){
 export function plantCrop(state,cropId,bedId=null) {
   const crop=CROPS[cropId]; if(!crop) return {ok:false,message:"未知作物"};
   const usedBeds=ensurePlotBedAssignments(state,state.position),beds=completedPlantingBeds(state,state.position);
-  const preferredBase = cropId === "grass" ? "grass_field" : cropId === "corn" ? "corn_field" : "planting_bed";
+  const preferredBase = cropId === "grass" ? "grass_field" : cropId === "corn" ? "corn_field" : cropId === "herb" ? "herb_field" : "planting_bed";
   const emptyBed=bedId
     ? beds.find(([id])=>id===bedId&&!usedBeds.has(id))
     : (beds.find(([id])=>!usedBeds.has(id)&&id.replace(/__\d+$/u,"")===preferredBase) || beds.find(([id])=>!usedBeds.has(id)));
   if(!emptyBed) return {ok:false,message:"当地没有空种植位"};
+  const baseId=emptyBed[0].replace(/__\d+$/u,"");
+  if((baseId==="grass_field"||baseId==="corn_field")&&cropId!=="grass"&&cropId!=="corn"){
+    return {ok:false,message:"草地只能播种草种或玉米"};
+  }
+  if(baseId==="herb_field"&&cropId!=="herb"){
+    return {ok:false,message:"药田只能播种草药种子"};
+  }
   if(!consumeItem(state,crop.seedId,1)) return {ok:false,message:"缺少种子"};
   const stamina=1;
   if(state.player.stamina<stamina){addItem(state,crop.seedId,1);return {ok:false,message:`体力不足，需要${formatStamina(stamina)}`};}
@@ -3050,6 +3081,8 @@ export function harvestPlot(state,plotId) {
     addItem(state,"feed",quantity);
   }else if(plot.cropId==="corn"){
     addItem(state,"fish_feed",quantity);
+  }else if(plot.cropId==="herb"){
+    addItem(state,"fresh_herb",quantity);
   }
   let seeds=0;
   const seedRolls=crop.cultivatedSeedPerHarvest?1:quantity;
@@ -3059,9 +3092,9 @@ export function harvestPlot(state,plotId) {
   if(plot.charges<=0){plot.phase="regrowing";plot.mature=false;plot.remaining=crop.growthDays;plot.fertility=0;plot.watered=false;plot.fertilized=false;plot.cycle+=1;plot.harvestedThisCycle=0;}
   progressGatherTasksForOutput(state,plot.cropId,quantity);
   progressTasks(state,"harvest",1);
-  const extraGain=plot.cropId==="grass"?[{itemId:"feed",quantity}]:plot.cropId==="corn"?[{itemId:"fish_feed",quantity}]:[];
+  const extraGain=plot.cropId==="grass"?[{itemId:"feed",quantity}]:plot.cropId==="corn"?[{itemId:"fish_feed",quantity}]:plot.cropId==="herb"?[{itemId:"fresh_herb",quantity}]:[];
   const gains=[{itemId:plot.cropId,quantity},...extraGain,...(seeds?[{itemId:crop.seedId,quantity:seeds}]:[])];
-  const feedGainText=plot.cropId==="grass"?`、${ITEMS.feed.name}×${quantity}`:plot.cropId==="corn"?`、${ITEMS.fish_feed.name}×${quantity}`:"";
+  const feedGainText=plot.cropId==="grass"?`、${ITEMS.feed.name}×${quantity}`:plot.cropId==="corn"?`、${ITEMS.fish_feed.name}×${quantity}`:plot.cropId==="herb"?`、${ITEMS.fresh_herb.name}×${quantity}`:"";
   addLog(state,`从家养${crop.name}取得${ITEMS[plot.cropId].name}×${quantity}${feedGainText}${seeds?`、${ITEMS[crop.seedId].name}×${seeds}`:""}。`);
   return {ok:true,quantity,message:receivedItemsMessage(gains),weatherExposure:resolveWeatherSicknessExposure(state,state.position,{ignoreHouse:true})};
 }
@@ -3070,26 +3103,39 @@ export function uprootCrop(state,plotId){
   const plots=state.plotsByArea[state.position]??[],index=plots.findIndex(plot=>plot.id===plotId);
   if(index<0)return {ok:false,message:"这个家养资源点已经不存在了"};
   ensurePlotBedAssignments(state,state.position);
-  const [plot]=plots.splice(index,1);addLog(state,`拔除了家养${CROPS[plot.cropId]?.name??"作物"}，栽培地重新空了出来。`);
+  const [plot]=plots.splice(index,1);
+  const baseId=plot.bedId?plot.bedId.replace(/__\d+$/u,""):"planting_bed";
+  const facilityName=BUILDINGS[baseId]?.name??"地块";
+  addLog(state,`拔除了家养${CROPS[plot.cropId]?.name??"作物"}，${facilityName}重新空了出来。`);
   return {ok:true,message:"已经拔除，种子不会返还"};
 }
 
-export function upgradePlotToGreenhouse(state,plotId){
-  const plot=(state.plotsByArea[state.position]??[]).find(entry=>entry.id===plotId),definition=BUILDINGS.greenhouse;
-  if(!plot)return {ok:false,message:"这个家养资源点已经不存在了"};
-  if(!state.ownedBlueprintIds.includes(definition.blueprintId??"greenhouse"))return {ok:false,message:"尚未获得温室蓝图"};
-  if(isGreenhousePlot(state,plot))return {ok:false,message:"这块栽培地已经是温室"};
-  const bed=getPlotBedProgress(state,plot);
-  if(!bed)return {ok:false,message:"没有找到这块栽培地"};
-  if(!hasInputs(state,definition.inputs))return {ok:false,message:"升级温室的材料不足"};
-  if(state.player.stamina<definition.stamina)return {ok:false,message:`体力不足，需要${formatStamina(definition.stamina)}`};
+export function upgradeBedToGreenhouse(state, bedId, areaId = state.position) {
+  const definition = BUILDINGS.greenhouse;
+  if (!state.ownedBlueprintIds.includes(definition.blueprintId ?? "greenhouse")) return { ok: false, message: "尚未获得温室蓝图" };
+  const bed = state.buildingsByArea?.[areaId]?.[bedId];
+  if (!bed) return { ok: false, message: "没有找到这处设施" };
+  if (bed.greenhouse) return { ok: false, message: "这里已经是温室" };
+  if (!hasInputs(state, definition.inputs)) return { ok: false, message: "升级温室的材料不足" };
+  if (state.player.stamina < definition.stamina) return { ok: false, message: `体力不足，需要${formatStamina(definition.stamina)}` };
   settleCurrentAreaResourcesForAction(state);
-  consumeInputs(state,definition.inputs);
-  state.player.stamina=roundStamina(state.player.stamina-definition.stamina);
-  bed.greenhouse=true;plot.greenhouse=true;
-  progressTasks(state,"build",1);
-  addLog(state,`${state.position}的一块栽培地升级成了温室。`);
-  return {ok:true,message:"这块栽培地已升级为温室",weatherExposure:resolveWeatherSicknessExposure(state,state.position)};
+  consumeInputs(state, definition.inputs);
+  state.player.stamina = roundStamina(state.player.stamina - definition.stamina);
+  bed.greenhouse = true;
+  const plots = state.plotsByArea[areaId] ?? [];
+  const plot = plots.find(p => p.bedId === bedId);
+  if (plot) plot.greenhouse = true;
+  progressTasks(state, "build", 1);
+  const baseId = bedId.replace(/__\d+$/u, "");
+  const facilityName = BUILDINGS[baseId]?.name ?? "地块";
+  addLog(state, `${areaId}的一块${facilityName}升级成了温室。`);
+  return { ok: true, message: `这块${facilityName}已升级为温室`, weatherExposure: resolveWeatherSicknessExposure(state, areaId) };
+}
+
+export function upgradePlotToGreenhouse(state,plotId){
+  const plot=(state.plotsByArea[state.position]??[]).find(entry=>entry.id===plotId);
+  if(!plot)return {ok:false,message:"这个家养资源点已经不存在了"};
+  return upgradeBedToGreenhouse(state, plot.bedId, state.position);
 }
 
 export function upgradePastureToGreenhouse(state, areaId = state.position) {
